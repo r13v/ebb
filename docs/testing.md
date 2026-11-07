@@ -19,6 +19,6 @@
 
 ## Live check
 
-The stubbed engine does not lay out the band or move the keys the way a real session does. A change of what the person sees needs a check in a real session. Inside agterm, `mise run live` (`scripts/live-check.sh`) opens one and prints the band with its card; it never grades, because the session uses the real data, so it cannot show the answer. Elsewhere, check by hand in `mise run dev`: the card above the prompt, ctrl+x tab and `g`, then `f` and Next, Escape, then a prompt that the band does not take keys from.
+The stubbed engine does not lay out the band or move the keys the way a real session does. A change of what the person sees needs a check in a real session. Inside agterm, `mise run live` (`scripts/live-check.sh`) opens one and prints the band with its card; it never grades, because the session uses the real data, so it cannot show the answer. Elsewhere, check by hand in `mise run dev`: the card above the prompt, ctrl+x tab and `u`, then `y` and Next, Escape, then a prompt that the band does not take keys from.
 
-For pi, check by hand in `mise run pi:dev`: the card above the editor, `alt+2`, then `alt+1` twice (Forgot, Next), a click on Got it, `alt+h` twice, and a prompt typed with `f`, `g` and `s` that the band leaves alone. A click needs a real mouse: agterm types keys into a session, not clicks.
+For pi, check by hand in `mise run pi:dev`: the card above the editor, `cmd+u`, then `cmd+y` twice (Forgot, Next), a click on Got it, `ctrl+0` twice, and a prompt typed with `y`, `u` and `i` that the band leaves alone. A click needs a real mouse: agterm types keys into a session, not clicks.

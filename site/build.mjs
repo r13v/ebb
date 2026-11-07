@@ -207,8 +207,8 @@ pre .k { color: var(--accent); }
       <div class="tool">⏺ <b>Bash</b> npm test -- login</div>
       <div class="reply"><span class="spin" id="spin">✻</span> <span class="word">Noodling</span><span class="meta">… (12s · ↓ 1.4k tokens)</span></div>
       <div class="band" id="band">
-        <div class="ask"><b id="front">el corazón</b><span class="sep">│</span><span class="btn"><i>f</i>: Forgot</span><span class="btn"><i>g</i>: Got it</span><span class="btn"><i>s</i>: Skip</span></div>
-        <div class="grades"><b id="pair">el corazón — heart</b><span class="hint" id="hint"></span><span class="sep">│</span><span class="btn"><i>f</i>: Next</span></div>
+        <div class="ask"><b id="front">el corazón</b><span class="sep">│</span><span class="btn"><i>y</i>: Forgot</span><span class="btn"><i>u</i>: Got it</span><span class="btn"><i>i</i>: Skip</span></div>
+        <div class="grades"><b id="pair">el corazón — heart</b><span class="hint" id="hint"></span><span class="sep">│</span><span class="btn"><i>y</i>: Next</span></div>
       </div>
       <div class="prompt">❯<span class="foot">🌊 ebb</span></div>
     </div>
@@ -219,8 +219,8 @@ pre .k { color: var(--accent); }
     <p class="sub">ebb uses the waits you already have. It schedules cards with FSRS-6, the algorithm in Anki, so each card comes back just before you would forget it.</p>
     <div class="steps">
       <div class="step"><span class="n">1</span><h3>A card</h3><p>Above the prompt, ebb shows the next card: a due one first, then a new one. You keep typing as usual.</p></div>
-      <div class="step"><span class="n">2</span><h3>Grade</h3><p>Got it or Forgot. In Claude Code, click, or press <code>ctrl+x tab</code> and <code>g</code> or <code>f</code>. In pi, press <code>alt+2</code> or <code>alt+1</code> straight from the prompt, or click. Skip puts the card aside for now.</p></div>
-      <div class="step"><span class="n">3</span><h3>Next</h3><p>Got it brings the next card at once. Forgot shows the answer with the note's hint, such as the gender of a word; Next (<code>f</code>, or <code>alt+1</code> in pi) brings the next card.</p></div>
+      <div class="step"><span class="n">2</span><h3>Grade</h3><p>Got it or Forgot. In Claude Code, click, or press <code>ctrl+x tab</code> and <code>u</code> or <code>y</code>. In pi, press <code>cmd+u</code> or <code>cmd+y</code> straight from the prompt, or click. Skip puts the card aside for now.</p></div>
+      <div class="step"><span class="n">3</span><h3>Next</h3><p>Got it brings the next card at once. Forgot shows the answer with the note's hint, such as the gender of a word; Next (<code>y</code>, or <code>cmd+y</code> in pi) brings the next card.</p></div>
     </div>
   </section>
 
@@ -229,7 +229,7 @@ pre .k { color: var(--accent); }
     <p class="sub">The same card, the same schedule, in Claude Code and in pi.</p>
     <div class="shots">
       <figure><img src="assets/claude-code.png" alt="ebb in Claude Code: a Spanish card above the prompt while Claude reads a file" loading="lazy"><figcaption>Claude Code: click, or <code>ctrl+x tab</code> and a key.</figcaption></figure>
-      <figure><img src="assets/pi.png" alt="ebb in pi: a Spanish card above the editor while pi works" loading="lazy"><figcaption>pi: <code>alt+1</code>, <code>alt+2</code>, <code>alt+3</code> right from the prompt, or a click.</figcaption></figure>
+      <figure><img src="assets/pi.png" alt="ebb in pi: a Spanish card above the editor while pi works" loading="lazy"><figcaption>pi: <code>cmd+y</code>, <code>cmd+u</code>, <code>cmd+i</code> right from the prompt, or a click.</figcaption></figure>
     </div>
   </section>
 

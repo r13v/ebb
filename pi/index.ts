@@ -22,9 +22,16 @@ import { fileHost } from './host'
 
 const WIDGET = 'ebb'
 
-// Modified keys, so the editor keeps every key it types. On a Mac, Option works as Alt only when the
-// terminal sends it so; the band also takes clicks. `cmd` digits switch the terminal's tabs.
-const KEYS = { forgot: 'alt+1', got: 'alt+2', skip: 'alt+3', toggle: 'alt+h' } as const satisfies Record<string, KeyId>
+type Keys = Record<'forgot' | 'got' | 'skip' | 'toggle', KeyId>
+
+// Modified keys, so the editor keeps every key it types; the same letters as the band of Claude Code.
+// `super` is cmd: Ghostty passes cmd chords it does not bind through the kitty keyboard protocol, and
+// binds cmd with a digit, e, w and most other letters itself. pi binds ctrl with nearly every letter,
+// and Option types a character on a Mac. Other terminals click the band or set `keys` in pi.json.
+const DEFAULT_KEYS: Keys = { forgot: 'super+y', got: 'super+u', skip: 'super+i', toggle: 'ctrl+0' }
+
+/** How a key reads in the band: `cmd+y` on a Mac, as the person presses it. */
+const keyLabel = (key: KeyId) => (process.platform === 'darwin' ? key.replace('super+', 'cmd+') : key)
 
 type Action = 'forgot' | 'got' | 'skip' | 'next'
 
@@ -32,8 +39,19 @@ type Action = 'forgot' | 'got' | 'skip' | 'next'
 type Part = { text: string; action?: Action }
 
 const files = fileHost(homedir(), dataDir(homedir(), process.env.XDG_DATA_HOME))
-// Whether the person hid the band; kept beside the data, so it stays hidden in new sessions.
+// The person's settings of the extension, beside the data: whether they hid the band, and their own keys.
 const SETTINGS = `${files.dir}/pi.json`
+
+type Settings = { hidden?: boolean; keys?: Partial<Keys> }
+
+/** The settings file, or none when it is missing or not JSON. */
+const readSettings = async (): Promise<Settings> => {
+  try {
+    return JSON.parse(await files.read(SETTINGS)) as Settings
+  } catch {
+    return {}
+  }
+}
 
 const textOf = (content: { type: string; text?: string }[]) =>
   content
@@ -42,7 +60,7 @@ const textOf = (content: { type: string; text?: string }[]) =>
     .join('')
 
 /** The pieces of the band; none while it is paused or without a card. */
-const bandParts = (v: BandView, theme: Theme): Part[] | undefined => {
+const bandParts = (v: BandView, theme: Theme, keys: Keys): Part[] | undefined => {
   if (v.kind === 'error') return [{ text: theme.fg('error', `ebb: cannot read the data: ${v.error}`) }]
   if (v.kind === 'no-deck')
     return [{ text: theme.fg('dim', 'ebb: /ebb add <topic> or /ebb install <file or URL> to get cards') }]
@@ -51,23 +69,23 @@ const bandParts = (v: BandView, theme: Theme): Part[] | undefined => {
   const f = v.face
   const bar = { text: `  ${theme.fg('dim', '│')}  ` }
   const button = (key: KeyId, label: string, action: Action): Part => ({
-    text: `${theme.fg('accent', key)} ${label}`,
+    text: `${theme.fg('accent', keyLabel(key))} ${label}`,
     action,
   })
   const gap = { text: '  ' }
   if (v.isRevealed) {
     const hint = f.hint ? theme.fg('dim', ` (${f.hint})`) : ''
-    return [{ text: `${theme.bold(f.ask)} — ${f.answer}${hint}` }, bar, button(KEYS.forgot, 'Next', 'next')]
+    return [{ text: `${theme.bold(f.ask)} — ${f.answer}${hint}` }, bar, button(keys.forgot, 'Next', 'next')]
   }
 
   return [
     { text: theme.bold(f.ask) },
     bar,
-    button(KEYS.forgot, 'Forgot', 'forgot'),
+    button(keys.forgot, 'Forgot', 'forgot'),
     gap,
-    button(KEYS.got, 'Got it', 'got'),
+    button(keys.got, 'Got it', 'got'),
     gap,
-    button(KEYS.skip, 'Skip', 'skip'),
+    button(keys.skip, 'Skip', 'skip'),
   ]
 }
 
@@ -99,7 +117,9 @@ const bandWidget = (parts: Part[], press: (action: Action) => void) => (_tui: un
   })
 }
 
-export default function ebb(pi: ExtensionAPI) {
+export default async function ebb(pi: ExtensionAPI) {
+  // Shortcuts are registered while pi loads the extension, so the keys are read here, once.
+  const keys: Keys = { ...DEFAULT_KEYS, ...(await readSettings()).keys }
   const session = createSession()
   let ctx: ExtensionContext | undefined
   let isHidden = false
@@ -107,7 +127,7 @@ export default function ebb(pi: ExtensionAPI) {
   const draw = async () => {
     if (!ctx?.hasUI) return
     const ui = ctx.ui
-    const parts = isHidden ? undefined : bandParts(await session.bandView(host), ui.theme)
+    const parts = isHidden ? undefined : bandParts(await session.bandView(host), ui.theme, keys)
     ui.setWidget(WIDGET, parts && bandWidget(parts, action => void press(action)))
   }
 
@@ -239,12 +259,7 @@ export default function ebb(pi: ExtensionAPI) {
 
   pi.on('session_start', async (_event, startCtx) => {
     ctx = startCtx
-    const settings = await files.read(SETTINGS).catch(() => '{}')
-    try {
-      isHidden = (JSON.parse(settings) as { hidden?: boolean }).hidden === true
-    } catch {
-      isHidden = false
-    }
+    isHidden = (await readSettings()).hidden === true
     await showNextCard()
   })
 
@@ -270,23 +285,23 @@ export default function ebb(pi: ExtensionAPI) {
     },
   })
 
-  pi.registerShortcut(KEYS.forgot, {
+  pi.registerShortcut(keys.forgot, {
     description: 'ebb: Forgot, or Next after the answer',
     handler: act(() => run('forgot')),
   })
-  pi.registerShortcut(KEYS.got, {
+  pi.registerShortcut(keys.got, {
     description: 'ebb: Got it',
     handler: act(() => run('got')),
   })
-  pi.registerShortcut(KEYS.skip, {
+  pi.registerShortcut(keys.skip, {
     description: 'ebb: skip the card',
     handler: act(() => run('skip')),
   })
-  pi.registerShortcut(KEYS.toggle, {
+  pi.registerShortcut(keys.toggle, {
     description: 'ebb: hide or show the card above the editor',
     handler: act(async () => {
       isHidden = !isHidden
-      await files.write(SETTINGS, JSON.stringify({ hidden: isHidden }))
+      await files.write(SETTINGS, JSON.stringify({ ...(await readSettings()), hidden: isHidden }))
       await draw()
     }),
   })

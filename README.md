@@ -40,8 +40,8 @@ claude plugin install ebb@ebb
 
 Then restart Claude Code.
 
-- The band above the prompt shows one card: `el corazón  │  f: Forgot  g: Got it  s: Skip`.
-- Got it brings the next card at once. Forgot shows the answer, with the note's hint if it has one: `el corazón — heart  │  f: Next`.
+- The band above the prompt shows one card: `el corazón  │  y: Forgot  u: Got it  i: Skip`.
+- Got it brings the next card at once. Forgot shows the answer, with the note's hint if it has one: `el corazón — heart  │  y: Next`.
 - The `🌊 ebb` button under the prompt hides the band and shows it again.
 
 To update, open `/plugin` in Claude Code, or run:
@@ -63,13 +63,17 @@ pi install npm:pi-ebb
 
 The commands are the same `/ebb` commands. The card shows above the editor. Grade it with a shortcut or a click; the editor keeps every key you type:
 
-- `alt+1` (Option+1 on a Mac): Forgot, and Next after the answer.
-- `alt+2`: Got it.
-- `alt+3`: Skip.
-- `alt+h`: hide or show the card. It stays as you left it in new sessions.
+- `cmd+y` (`super+y` off a Mac): Forgot, and Next after the answer.
+- `cmd+u`: Got it.
+- `cmd+i`: Skip.
+- `ctrl+0`: hide or show the card. It stays as you left it in new sessions.
 - Or click a button of the band. pi passes clicks in its fullscreen mode, the default.
 
-On a Mac, Option must work as Alt: in Ghostty or agterm set `macos-option-as-alt = true`, in iTerm2 set the Option key to Esc+. Otherwise Option+1 types `¡`; click the band instead.
+`cmd` reaches pi in Ghostty and agterm, through the kitty keyboard protocol. Other terminals, such as Terminal.app and iTerm2, keep `cmd` for themselves: click the band there, or set your own keys in `$XDG_DATA_HOME/ebb/pi.json` and restart pi:
+
+```json
+{"keys": {"forgot": "alt+1", "got": "alt+2", "skip": "alt+3", "toggle": "alt+0"}}
+```
 
 `/ebb add` uses the model of the session and shows the notes in a list: press `1` to `9` to tick a note, `a` to add the ticked notes, `x` or Escape to cancel.
 
@@ -125,9 +129,9 @@ A deck file is JSON:
 In the band above the prompt:
 
 - Click a button, or press `ctrl+x tab` to move the keys to the band and then press its key.
-- Press `f` (Forgot) or `g` (Got it) to grade the card. Each button shows its key.
-- After Forgot, the band shows the answer; press `f` (Next) for the next card.
-- Press `s` to skip the card. A skipped card comes back when no other card is left.
+- Press `y` (Forgot) or `u` (Got it) to grade the card. Each button shows its key. The keys sit side by side, and they are the letters of the pi shortcuts.
+- After Forgot, the band shows the answer; press `y` (Next) for the next card.
+- Press `i` to skip the card. A skipped card comes back when no other card is left.
 - Press Escape to return to the prompt.
 - Click `🌊 ebb` under the prompt to hide or show the band. It stays as you left it in new sessions.
 

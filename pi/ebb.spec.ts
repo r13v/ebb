@@ -2,7 +2,7 @@
 // command, events and shortcuts, and its model calls go to pi's faux provider. Only the terminal is
 // a stand-in, typed by pi's `ExtensionUIContext`, as pi's own test suite does it.
 
-import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -179,12 +179,12 @@ test('a shortcut grades the card in the band, and the schedule and the log are s
   const pi = await startPi()
   await pi.session.prompt(`/ebb install ${join(dir, 'es.json')}`)
   const first = pi.screen.band?.[0]
-  expect(first).toMatch(/alt\+1 Forgot {2}alt\+2 Got it {2}alt\+3 Skip/)
+  expect(first).toMatch(/(cmd|super)\+y Forgot {2}(cmd|super)\+u Got it {2}(cmd|super)\+i Skip/)
 
-  await pi.press('alt+1')
-  expect(pi.screen.band?.[0]).toMatch(/— (heart|hand).*alt\+1 Next/)
-  await pi.press('alt+2') // Got it does nothing while the answer is open
-  await pi.press('alt+1')
+  await pi.press('super+y')
+  expect(pi.screen.band?.[0]).toMatch(/— (heart|hand).*(cmd|super)\+y Next/)
+  await pi.press('super+u') // Got it does nothing while the answer is open
+  await pi.press('super+y')
   expect(pi.screen.band?.[0]).not.toBe(first)
 
   expect(await reps()).toBe(1)
@@ -214,16 +214,31 @@ test('a click on a button of the band grades the card as its key does', async ()
   expect(click(pi.screen, '│')).toBeUndefined() // not a button: the click stays with pi
 })
 
+test('keys set in pi.json replace the default ones, and hiding the band keeps them', async () => {
+  await mkdir(join(dir, 'ebb'), { recursive: true })
+  await writeFile(join(dir, 'ebb', 'pi.json'), JSON.stringify({ keys: { got: 'ctrl+2' } }))
+  const pi = await startPi()
+  await pi.session.prompt(`/ebb install ${join(dir, 'es.json')}`)
+  expect(pi.screen.band?.[0]).toMatch(/ctrl\+2 Got it/)
+
+  await pi.press('ctrl+2')
+  expect(await reps()).toBe(1)
+
+  await pi.press('ctrl+0')
+  const settings = JSON.parse(await readFile(join(dir, 'ebb', 'pi.json'), 'utf8'))
+  expect(settings).toEqual({ keys: { got: 'ctrl+2' }, hidden: true })
+})
+
 test('the band stays hidden in the next session and takes no grade', async () => {
   const pi = await startPi()
   await pi.session.prompt(`/ebb install ${join(dir, 'es.json')}`)
-  await pi.press('alt+h')
+  await pi.press('ctrl+0')
   expect(pi.screen.band).toBeUndefined()
 
   vi.resetModules()
   const next = await startPi()
   expect(next.screen.band).toBeUndefined()
-  await next.press('alt+2')
+  await next.press('super+u')
   expect(await reps()).toBe(0)
 })
 

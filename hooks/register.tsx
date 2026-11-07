@@ -88,9 +88,10 @@ const gradeCurrent = async ($: $, rating: Rating) => {
 
 // Two grades, Again and Good: whether the person recalled the card is what FSRS needs most.
 // Letters, not digits: a bare digit in an empty prompt presses a band Button, and the band never takes the prompt's keys.
+// y, u and i side by side, the same letters as the cmd shortcuts of the pi extension.
 const GRADES = [
-  { rating: 1, hotkey: 'f', label: 'Forgot' },
-  { rating: 3, hotkey: 'g', label: 'Got it' },
+  { rating: 1, hotkey: 'y', label: 'Forgot' },
+  { rating: 3, hotkey: 'u', label: 'Got it' },
 ] as const
 
 /** The card in the band, or nothing while the cards are paused or none is chosen. */
@@ -114,7 +115,7 @@ const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve
         <Text dimColor>│</Text>
         <Button
           key="next"
-          hotkey="f"
+          hotkey="y"
           plain
           variant="primary"
           label="Next"
@@ -136,7 +137,7 @@ const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve
           onPress={() => void gradeCurrent($, g.rating)}
         />
       ))}
-      <Button key="skip" hotkey="s" plain label="Skip" onPress={async () => session.skip(await hostOf($))} />
+      <Button key="skip" hotkey="i" plain label="Skip" onPress={async () => session.skip(await hostOf($))} />
     </Box>
   )
 }
