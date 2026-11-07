@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["hooks/register.tsx", "tests/**/*.test.{ts,tsx}", "pi/**/*.spec.ts"],
+  "entry": ["hooks/register.tsx", "types/index.d.ts", "tests/**/*.test.{ts,tsx}", "pi/**/*.spec.ts"],
   "project": [
     "hooks/**/*.{ts,tsx}",
     "core/**/*.ts",
