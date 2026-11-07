@@ -95,7 +95,8 @@ In the pane of `/ebb add`:
 
 - A new note gets a recognition card (for example Spanish → Russian).
 - In a language deck, when the recognition card reaches a stability of 21 days, ebb adds a production card (Russian → Spanish). A deck of facts asks in one direction only.
-- The band shows due cards first. Then it shows new cards in deck order, up to 10 each day for each deck. Then new production cards: they are words you know already, so they do not count toward the 10. Then it shows learning cards that come due in the next 20 minutes.
+- The band shows due cards first. Then it shows new cards in deck order, up to 20 each day for each deck. Then new production cards: they are words you know already, so they do not count toward the 20. To change the number, set `newPerDay` on the deck in `data.json`.
+- A card you just graded or skipped never comes straight back while another card is left. A learning card waits for its step.
 - Learning steps are 1 minute and 10 minutes. The relearning step is 10 minutes.
 - When nothing is scheduled, the band runs ahead: new cards past the daily limit, then the card that comes due soonest. So it always has a card.
 - Only a grade changes a schedule. Showing or skipping a card does not.

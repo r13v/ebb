@@ -160,7 +160,7 @@ test('data from the first build keeps today’s count of new cards', async () =>
   ;(data.meta as Record<string, unknown>).newDay = new Date(now).toDateString()
   ;(data.meta as Record<string, unknown>).newToday = 3
   upgrade(data)
-  expect(newLeftToday(data, data.decks.es!, now)).toBe(7)
+  expect(newLeftToday(data, data.decks.es!, now)).toBe(17)
   expect('newToday' in data.meta).toBe(false)
 })
 
@@ -171,4 +171,20 @@ test('skipped cards wait until no other card is left', async () => {
   expect(second.id).not.toBe(first.id)
   const all = new Set(Object.keys(data.cards))
   expect(nextCard(data, 0, all)).toBeUndefined()
+})
+
+test('a deck on the old default of 10 new cards a day gets 20', async () => {
+  const data = seeded()
+  data.decks.es!.newPerDay = 10
+  upgrade(data)
+  expect(data.decks.es!.newPerDay).toBe(20)
+})
+
+test('a learning card waits for its step while other cards are left', async () => {
+  const data = seeded()
+  const now = Date.UTC(2026, 10, 7, 10)
+  const first = nextCard(data, now)!
+  grade(data, first.id, 3, now)
+  expect(nextCard(data, now + 60_000)!.id).not.toBe(first.id)
+  expect(nextCard(data, now + 11 * 60_000)!.id).toBe(first.id)
 })

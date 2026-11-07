@@ -201,15 +201,19 @@ const listDecks = async ($: $): Promise<string> => {
 // Cards skipped in this session; they come back when nothing else is left.
 const skipped = new Set<string>()
 
-/** Puts the next card in the band, with its answer hidden. */
-const showNextCard = async ($: $) => {
+/**
+ * Puts the next card in the band, with its answer hidden. `previous`, the card just graded or
+ * skipped, never comes straight back while another card is left.
+ */
+const showNextCard = async ($: $, previous?: string) => {
   try {
     const data = await load($)
     const now = Date.now()
-    let card = nextCard(data, now, skipped)
-    if (!card && skipped.size) {
+    const avoid = previous ? [previous] : []
+    let card = nextCard(data, now, new Set([...skipped, ...avoid]))
+    if (!card) {
       skipped.clear()
-      card = nextCard(data, now)
+      card = nextCard(data, now, new Set(avoid)) ?? nextCard(data, now)
     }
     await update($, band, (): Band => ({ cardId: card?.id ?? null, isRevealed: false, shownAt: now }))
   } catch (error) {
@@ -223,7 +227,7 @@ const reveal = ($: $) => update($, band, old => ({ ...old, isRevealed: true }))
 const skip = async ($: $) => {
   const { cardId } = await read($, band)
   if (cardId) skipped.add(cardId)
-  await showNextCard($)
+  await showNextCard($, cardId ?? undefined)
 }
 
 let isGrading = false
@@ -237,7 +241,7 @@ const gradeCurrent = async ($: $, rating: Rating) => {
     const graded = await mutate($, data => grade(data, cardId, rating, Date.now(), Math.random, Date.now() - b.shownAt))
     await appendLog($, graded.log)
     skipped.delete(cardId)
-    await showNextCard($)
+    await showNextCard($, cardId)
   } catch (error) {
     $.ui.toast(`ebb: the grade was not saved: ${String(error)}`)
   } finally {

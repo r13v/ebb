@@ -62,8 +62,16 @@ export type Face = { card: Card; note: Note; ask: string; answer: string; hint?:
 
 export const emptyData = (): Data => ({ version: 1, decks: {}, notes: {}, cards: {}, meta: {} })
 
-/** Data written by the first build kept one daily counter for all decks; it was the Spanish deck's. */
+/** New recognition cards a deck brings each day, as in Anki. */
+const NEW_PER_DAY = 20
+const OLD_NEW_PER_DAY = 10
+
+/**
+ * Reads data that earlier builds wrote. The first build kept one daily counter for all decks;
+ * it was the Spanish deck's. A deck still on the old default of 10 new cards a day gets the new one.
+ */
 export const upgrade = (data: Data): Data => {
+  for (const deck of Object.values(data.decks)) if (deck.newPerDay === OLD_NEW_PER_DAY) deck.newPerDay = NEW_PER_DAY
   const old = data.meta as Data['meta'] & { newDay?: string; newToday?: number }
   if (old.newDay !== undefined) {
     data.meta.newByDeck ??= { es: { day: old.newDay, count: old.newToday ?? 0 } }
@@ -93,7 +101,7 @@ export const face = (data: Data, card: Card): Face | undefined => {
 
 export const ensureDeck = (data: Data, deck: Partial<Deck> & { id: string; name: string }) => {
   data.decks[deck.id] ??= {
-    newPerDay: 10,
+    newPerDay: NEW_PER_DAY,
     kinds: ['recognition', 'production'],
     productionUnlockDays: 21,
     ...deck,
@@ -166,11 +174,6 @@ export const addNotes = (
 }
 
 const isNew = (c: Card) => c.state === 0
-const isLearning = (c: Card) => c.state === 1 || c.state === 3
-
-// A learning card this close to its due time is shown before the cards ahead of schedule.
-const LEARN_AHEAD_MS = 20 * 60_000
-
 const localDay = (now: number) => new Date(now).toDateString()
 
 export const newLeftToday = (data: Data, deck: Deck, now: number) => {
@@ -194,8 +197,9 @@ const byOrder = (data: Data) => (a: Card, b: Card) =>
 /**
  * The next card for the band, or none only when every card is skipped.
  * By schedule first: due cards, new recognition cards within the daily limit, new production
- * cards, learning cards due soon. Then ahead of schedule, so the band never runs dry: new cards
- * past the limit, in deck order, then the card that comes due soonest.
+ * cards. Then ahead of schedule, so the band never runs dry: new cards past the limit, in deck
+ * order, then the card that comes due soonest. A learning card waits for its step (1 or 10
+ * minutes) like any other: shown early, it would come straight back after its grade.
  * A production card is of a word the person knows already, so it takes none of the daily limit:
  * otherwise a mature deck would fill the limit with them and stop new words.
  */
@@ -212,9 +216,6 @@ export const nextCard = (data: Data, now: number, skip: ReadonlySet<string> = ne
 
   const production = fresh.find(c => c.kind === 'production')
   if (production) return production
-
-  const learningSoon = cards.filter(c => isLearning(c) && c.due <= now + LEARN_AHEAD_MS).sort((a, b) => a.due - b.due)
-  if (learningSoon[0]) return learningSoon[0]
 
   const soonest = cards.filter(c => !isNew(c)).sort((a, b) => a.due - b.due)
 

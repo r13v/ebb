@@ -217,6 +217,30 @@ test('the band shows a card, reveals it, grades once on a double press and moves
   await ui.unmount()
 })
 
+test('a graded card never comes straight back, also in a deck of two', async ($, on) => {
+  engine(on)
+  const fs = disk(on)
+  fs.files.set(`${HOME}/decks/es.json`, {
+    text: deckFile([
+      ['el corazón', 'heart'],
+      ['la mano', 'hand'],
+    ]),
+    mtimeMs: 0,
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.command.run(ebb('install ~/decks/es.json'))
+  const ui = await $.ui.mount(BAND)
+  let last = await front(ui)
+  for (let n = 0; n < 6; n++) {
+    await ui.press({ key: 'show' })
+    await ui.press({ key: n % 2 ? 'g3' : 'g1' })
+    const next = await front(ui)
+    expect(next).not.toBe(last)
+    last = next
+  }
+  await ui.unmount()
+})
+
 test('skip shows another card and changes no schedule', async ($, on) => {
   engine(on)
   const fs = disk(on)
