@@ -19,7 +19,7 @@ Priorities: readability, simplicity, maintainability. Biome (`biome.json`) check
 
 ## Maintainability
 
-10. **Name complex conditions and non-obvious literals.** A threshold or a window gets a constant near its use, with its unit in the name or a comment (`DAY`, `passiveShows`).
+10. **Name complex conditions and non-obvious literals.** A threshold or a window gets a constant near its use, with its unit in the name or a comment (`DAY`, `LOCK_STALE_MS`).
 11. **Keep `!` for an index that the code has already checked.** `noUncheckedIndexedAccess` is on; a `!` says "this index exists", so it needs a reason that a reader can see nearby.
 12. **Give the extension of a relative import only where the engine needs it.** Follow the existing imports: `./model`, `../types`.
 13. **Update dependencies deliberately.** Pin exact versions in `package.json` and `mise.toml`. Do not update the whole stack as part of an unrelated task.
@@ -42,4 +42,5 @@ Keep what the code, names and types do not show: the reason for a decision, an e
 - **A test fails without its fix.** Break the rule once (revert the fix or apply a one-line mutation) and see the test fail.
 - **A test takes the input production gives.** Build test data with the same writer the mod uses (`parseDeckFile`, `addNotes`), not by hand in a convenient shape.
 - **A reader that runs on every render does not throw.** `JSON.parse` of a file that a person or another session can write needs its own guard: one throw in a `ui.render` hook skips the hook.
+- **A render hook on a shared site keeps the others.** On `AbovePrompt`, `SessionMode` and other sites that several plugins draw into, the hook calls `next(e)` and puts its own part beside the result. A tree returned without `next(e)` hides every plugin beneath.
 - **The owner document changes with the contract.** Grep `README.md`, `CONTEXT.md` and `docs/` for the changed name.

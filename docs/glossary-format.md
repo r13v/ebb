@@ -17,7 +17,7 @@ _Avoid_: Flashcard, question
 
 ## Rules
 
-1. **One term per concept.** Choose the canonical word and list the others in `_Avoid_`. Separate similar concepts explicitly: each gets its own term and an `_Avoid_` with the neighbour's term (Exposure and Review).
+1. **One term per concept.** Choose the canonical word and list the others in `_Avoid_`. Separate similar concepts explicitly: each gets its own term and an `_Avoid_` with the neighbour's term (Review and Skip).
 2. **A definition is one or two sentences.** State what the concept is, not everything it does.
 3. **Domain terms only.** Implementation details and general technical concepts go to their owner document.
 4. **A human decides the term.** Record a new term or a change of meaning after the user decides or explicitly delegates the choice.

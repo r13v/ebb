@@ -1,4 +1,4 @@
-// Prompts and parsers for model calls: generating notes, checking them, answering a question.
+// Prompts and parsers for model calls: generating notes and checking them.
 // Pure: register.tsx makes the calls.
 
 import type { Candidate } from '../types'
@@ -83,17 +83,6 @@ export const flagMismatches = (notes: NoteInput[], reply: string): Candidate[] =
     return isClose ? { ...note, isChecked: true } : { ...note, isChecked: false, flag: `back-translation: ${back}` }
   })
 }
-
-export const questionPrompt = (
-  deck: Deck,
-  ask: string,
-  answer: string,
-  hint: string | undefined,
-  question: string,
-) => ({
-  system: `You are a concise tutor inside a flashcard app. ${deck.learn && deck.native ? `The learner is a ${deck.native} speaker learning ${deck.learn}. Answer in ${deck.native}.` : `Deck: ${deck.name}. Answer in the language of the question.`} Use at most 6 short lines, plain text without markdown.`,
-  prompt: `Card: ${ask} — ${answer}${hint ? ` (${hint})` : ''}\nQuestion: ${question}`,
-})
 
 /** What a new deck needs, read from the request and the person's recent messages. */
 export type DeckReply = { id: string; name: string; learn: string | null; native: string | null }

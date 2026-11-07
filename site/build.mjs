@@ -20,7 +20,7 @@ const decks = readdirSync(join(root, 'decks'))
     return { file, ...d }
   })
 
-// Words for the spinner demo: short fronts from every deck.
+// Cards for the band demo: short fronts from every deck.
 const demo = decks.flatMap(d =>
   d.notes
     .filter(n => n.front.length <= 22)
@@ -54,7 +54,7 @@ const html = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ebb — learn while Claude thinks</title>
-<meta name="description" content="ebb is a Claude Code plugin for spaced repetition: a card in the spinner while Claude works, its answer when the turn ends.">
+<meta name="description" content="ebb is a Claude Code plugin for spaced repetition: one card above the prompt, revealed and graded while Claude works.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -115,9 +115,14 @@ button.copy.done { background: var(--ink); color: var(--bg); }
 .term .spin { color: var(--accent); }
 .term .word { color: var(--term-ink); font-weight: 500; }
 .term .meta { color: var(--term-dim); }
-.term .done { color: var(--term-dim); opacity: 0; transition: opacity .4s ease; }
-.term .done.on { opacity: 1; }
-.term .done b { color: var(--term-ink); font-weight: 400; }
+.term .band { margin-top: 14px; color: var(--term-dim); }
+.term .band b { color: var(--term-ink); font-weight: 500; }
+.term .band .btn { color: var(--term-ink); margin-left: 10px; }
+.term .band .btn.primary { color: var(--accent); }
+.term .grades { display: none; }
+.term .band.on .grades { display: block; }
+.term .band.on .ask { display: none; }
+.term .prompt { margin-top: 6px; padding-top: 6px; border-top: 1px solid #3a2f2b; color: var(--term-dim); }
 
 /* sections */
 section { padding: 56px 0; border-top: 1px solid var(--line); }
@@ -174,7 +179,7 @@ pre .k { color: var(--accent); }
   <div class="hero">
     <div>
       <h1>Learn while <em>Claude</em> thinks.</h1>
-      <p class="lead">ebb is a Claude Code plugin for spaced repetition. While Claude works, the spinner shows a card. When the turn ends, you see the answer. Review with <code>/ebb</code> when you want; nothing ever interrupts you.</p>
+      <p class="lead">ebb is a Claude Code plugin for spaced repetition. One card waits above the prompt. Show its answer and grade it while Claude works; skip it when you are busy. Nothing ever interrupts you.</p>
       <div class="install">
         <div class="row"><code>claude plugin marketplace add r13v/ebb</code><button class="copy" data-copy="claude plugin marketplace add r13v/ebb">Copy</button></div>
         <div class="row"><code>claude plugin install ebb@ebb</code><button class="copy" data-copy="claude plugin install ebb@ebb">Copy</button></div>
@@ -186,18 +191,22 @@ pre .k { color: var(--accent); }
       <div class="you">❯ <b>fix the flaky login test</b></div>
       <div class="tool">⏺ <b>Read</b> tests/login.spec.ts</div>
       <div class="tool">⏺ <b>Bash</b> npm test -- login</div>
-      <div class="reply"><span class="spin" id="spin">✻</span> <span class="word" id="word">el corazón</span><span class="meta">… (12s · ↓ 1.4k tokens)</span></div>
-      <div class="done" id="done">✻ Baked for 12s · <b id="pair">el corazón — heart</b> · 7 due · /ebb</div>
+      <div class="reply"><span class="spin" id="spin">✻</span> <span class="word">Noodling</span><span class="meta">… (12s · ↓ 1.4k tokens)</span></div>
+      <div class="band" id="band">
+        <div class="ask"><b id="front">el corazón</b><span class="btn primary">[ Show ]</span><span class="btn">[ Skip ]</span></div>
+        <div class="grades"><b id="pair">el corazón — heart</b><span class="btn">[ Again 1m ]</span><span class="btn">[ Hard 6m ]</span><span class="btn primary">[ Good 10m ]</span><span class="btn">[ Easy 2d ]</span></div>
+      </div>
+      <div class="prompt">❯</div>
     </div>
   </div>
 
   <section>
-    <h2>Three places, no pop-ups</h2>
+    <h2>One line, no pop-ups</h2>
     <p class="sub">ebb uses the waits you already have. It schedules cards with FSRS-6, the algorithm in Anki.</p>
     <div class="steps">
-      <div class="step"><span class="n">1</span><h3>The spinner</h3><p>While Claude works, the spinner shows a card instead of its usual word. Each card gives way after three showings, so you move through the deck by yourself.</p></div>
-      <div class="step"><span class="n">2</span><h3>The turn line</h3><p>When the turn ends, the line under it shows the answer and how many cards are due.</p></div>
-      <div class="step"><span class="n">3</span><h3><code>/ebb</code></h3><p>A pane opens beside the chat. <code>r</code> shows the answer, <code>1</code>–<code>4</code> grade it, <code>q</code> asks Claude about the card.</p></div>
+      <div class="step"><span class="n">1</span><h3>A card</h3><p>Above the prompt, ebb shows the next card: a due one first, then a new one. You keep typing as usual.</p></div>
+      <div class="step"><span class="n">2</span><h3>Show</h3><p>Click Show, or press <code>ctrl+x tab</code> and <code>r</code>. Skip puts the card aside for now.</p></div>
+      <div class="step"><span class="n">3</span><h3>Grade</h3><p>Again, Hard, Good or Easy, each with its next interval. Then the next card comes.</p></div>
     </div>
   </section>
 
@@ -250,17 +259,17 @@ document.querySelectorAll('button.copy').forEach(btn => {
     setTimeout(() => { btn.textContent = label; btn.classList.remove('done'); }, 1400);
   });
 });
-// The spinner demo: a card while Claude works, then its answer on the turn line.
+// The band demo: a card above the prompt, then its answer and the grades.
 const glyphs = ['✻', '✢', '✳', '✶'];
 let g = 0, i = 0;
-const word = document.getElementById('word'), pair = document.getElementById('pair'), done = document.getElementById('done'), spin = document.getElementById('spin');
+const band = document.getElementById('band'), front = document.getElementById('front'), pair = document.getElementById('pair'), spin = document.getElementById('spin');
 setInterval(() => { spin.textContent = glyphs[g++ % glyphs.length]; }, 160);
 const cycle = () => {
   if (!demo.length) return;
-  const [front, back] = demo[i++ % demo.length];
-  done.classList.remove('on');
-  word.textContent = front;
-  setTimeout(() => { pair.textContent = front + ' — ' + back; done.classList.add('on'); }, 2200);
+  const [f, back] = demo[i++ % demo.length];
+  band.classList.remove('on');
+  front.textContent = f;
+  setTimeout(() => { pair.textContent = f + ' — ' + back; band.classList.add('on'); }, 2200);
 };
 if (!matchMedia('(prefers-reduced-motion: reduce)').matches) { cycle(); setInterval(cycle, 4200); }
 </script>

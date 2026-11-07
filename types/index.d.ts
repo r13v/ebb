@@ -12,21 +12,20 @@ export type Candidate = {
 /** A deck `/ebb add` makes when the person adds its first notes; `native` is asked when the request does not show it. */
 export type NewDeck = { id: string; name: string; learn?: string; native?: string }
 
-/** What the study pane shows. */
-export type View =
-  | {
-      mode: 'study'
-      cardId: string | null
-      isRevealed: boolean
-      shownAt: number
-      isAsking: boolean
-      reply?: string
-      note?: string
-    }
-  | { mode: 'add'; deck: string; topic: string; candidates: Candidate[]; status?: string; newDeck?: NewDeck }
+/** What the pane of `/ebb add` shows. */
+export type View = {
+  deck: string
+  topic: string
+  candidates: Candidate[]
+  status?: string
+  newDeck?: NewDeck
+}
+
+/** The card the band above the prompt shows. */
+export type Band = { cardId: string | null; isRevealed: boolean; shownAt: number }
 
 declare module 'claude-code' {
   interface PluginState {
-    ebb: { view: Shaped<View>; spinner: Shaped<string | null> }
+    ebb: { view: Shaped<View | null>; band: Shaped<Band>; hidden: Shaped<boolean> }
   }
 }

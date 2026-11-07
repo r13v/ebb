@@ -9,12 +9,8 @@ import {
   ensureDeck,
   grade,
   newLeftToday,
-  nextStudyCard,
-  PASSIVE_SHOWS,
-  type Passive,
+  nextCard,
   parseDuration,
-  passiveKey,
-  pickSpinnerCard,
   upgrade,
 } from '../hooks/model'
 
@@ -43,41 +39,30 @@ test('re-adding the same fronts adds nothing', async () => {
   expect(Object.keys(data.cards)).toHaveLength(4)
 })
 
-test('the spinner skips long fronts and the card shown last turn', async () => {
-  const data = seeded()
-  const first = pickSpinnerCard(data, {}, 0, undefined, () => 0)!
-  expect(first.ask.length).toBeLessThanOrEqual(40)
-  for (let i = 0; i < 20; i++) {
-    const next = pickSpinnerCard(data, {}, 0, first.card.id, () => i / 20)!
-    expect(next.card.id).not.toBe(first.card.id)
-    expect(next.ask).not.toMatch(/pájaro/)
-  }
-})
-
-test('the spinner prefers cards in learning over new ones', async () => {
-  const data = seeded()
-  const hablar = Object.values(data.cards).find(c => data.notes[c.note]!.front === 'hablar')!
-  grade(data, hablar.id, 3, 1000)
-  expect(pickSpinnerCard(data, {}, 2000, undefined, () => 0.5)!.ask).toBe('hablar')
-})
-
-test('pause hides the spinner card', async () => {
-  const data = seeded()
-  data.meta.pausedUntil = 10_000
-  expect(pickSpinnerCard(data, {}, 5000, undefined, Math.random)).toBeUndefined()
-  expect(pickSpinnerCard(data, {}, 20_000, undefined, Math.random)).toBeDefined()
-})
-
-test('a study session serves due cards, then new ones up to the daily limit', async () => {
+test('the band takes due cards, then new ones up to the daily limit, then runs ahead', async () => {
   const data = seeded()
   data.decks.es!.newPerDay = 2
   const now = Date.UTC(2026, 10, 7, 10)
-  const a = nextStudyCard(data, now)!
+  const order = (id: string) => data.notes[data.cards[id]!.note]!.order
+  const a = nextCard(data, now)!
   grade(data, a.id, 4, now)
-  const b = nextStudyCard(data, now)!
+  const b = nextCard(data, now)!
   grade(data, b.id, 4, now)
-  expect(nextStudyCard(data, now)).toBeUndefined()
-  expect(nextStudyCard(data, now + 30 * DAY)).toBeDefined()
+  expect([order(a.id), order(b.id)]).toEqual([0, 1])
+  // Past the daily limit the band still shows the next new card in deck order.
+  const ahead = nextCard(data, now)!
+  expect(order(ahead.id)).toBe(2)
+
+  const later = now + 30 * DAY
+  expect(nextCard(data, later)!.state).not.toBe(0)
+})
+
+test('with no new card left, the band shows the card that comes due soonest', async () => {
+  const data = seeded()
+  const now = Date.UTC(2026, 10, 7, 10)
+  for (const id of Object.keys(data.cards)) grade(data, id, 4, now)
+  const soonest = Object.values(data.cards).sort((x, y) => x.due - y.due)[0]!
+  expect(nextCard(data, now)!.id).toBe(soonest.id)
 })
 
 test('a stable recognition card unlocks its production card', async () => {
@@ -160,38 +145,11 @@ test('data from the first build keeps today’s count of new cards', async () =>
   expect('newToday' in data.meta).toBe(false)
 })
 
-test('the spinner moves on through new cards without any review', async () => {
-  const data = emptyData()
-  ensureDeck(data, { id: 'es', name: 'Castellano' })
-  addNotes(
-    data,
-    'es',
-    Array.from({ length: 20 }, (_, i) => ({ front: `palabra ${i}`, back: `слово ${i}` })),
-    'test',
-    0,
-  )
-  const passive: Passive = {}
-  const shown = new Set<string>()
-  let last: string | undefined
-  for (let turn = 0; turn < 60; turn++) {
-    const f = pickSpinnerCard(data, passive, 0, last, Math.random)!
-    passive[passiveKey(f.card)] = (passive[passiveKey(f.card)] ?? 0) + 1
-    // Until the deck runs out of fresh cards, no card goes past its showings.
-    if (turn < 50) expect(passive[passiveKey(f.card)]).toBeLessThanOrEqual(PASSIVE_SHOWS)
-    shown.add(f.ask)
-    last = f.card.id
-  }
-  expect(shown.size).toBe(20)
-})
-
-test('an overdue card gives way after its showings, and a review counts again', async () => {
+test('skipped cards wait until no other card is left', async () => {
   const data = seeded()
-  const id = Object.keys(data.cards)[0]!
-  data.cards[id] = { ...data.cards[id]!, state: 2, stability: 5, difficulty: 5, lastReview: 0, due: DAY }
-  const passive: Passive = { [passiveKey(data.cards[id]!)]: PASSIVE_SHOWS }
-  for (let i = 0; i < 10; i++)
-    expect(pickSpinnerCard(data, passive, 2 * DAY, undefined, Math.random)!.card.id).not.toBe(id)
-  grade(data, id, 3, 2 * DAY)
-  data.cards[id]!.due = 2 * DAY
-  expect(pickSpinnerCard(data, passive, 2 * DAY, undefined, () => 0)!.card.id).toBe(id)
+  const first = nextCard(data, 0)!
+  const second = nextCard(data, 0, new Set([first.id]))!
+  expect(second.id).not.toBe(first.id)
+  const all = new Set(Object.keys(data.cards))
+  expect(nextCard(data, 0, all)).toBeUndefined()
 })

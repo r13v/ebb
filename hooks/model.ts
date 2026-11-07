@@ -5,7 +5,7 @@ import { newSchedule, type Rating, type Schedule, scheduler } from './fsrs'
 
 export const DAY = 86_400_000
 
-export type Kind = 'recognition' | 'production'
+type Kind = 'recognition' | 'production'
 
 export type Deck = {
   id: string
@@ -15,8 +15,6 @@ export type Deck = {
   kinds: Kind[]
   /** Stability in days of the recognition card that unlocks production. */
   productionUnlockDays: number
-  /** Spinner showings of a card before it gives way to the next one. */
-  passiveShows?: number
   /** The language the deck teaches, and the language of its answers; absent for a deck of facts. */
   learn?: string
   native?: string
@@ -57,15 +55,10 @@ type ReviewLog = {
   scheduledMs: number
   durationMs?: number
 }
-type Exposure = { ts: number; card: string }
-export type MonthLog = { reviews: ReviewLog[]; exposures: Exposure[] }
+export type MonthLog = { reviews: ReviewLog[] }
 
 /** What a card asks and answers, by its kind. */
 export type Face = { card: Card; note: Note; ask: string; answer: string; hint?: string }
-
-const SPINNER_MAX = 40
-const ACTIVE_NEW = 5
-export const PASSIVE_SHOWS = 3
 
 export const emptyData = (): Data => ({ version: 1, decks: {}, notes: {}, cards: {}, meta: {} })
 
@@ -175,6 +168,9 @@ export const addNotes = (
 const isNew = (c: Card) => c.state === 0
 const isLearning = (c: Card) => c.state === 1 || c.state === 3
 
+// A learning card this close to its due time is shown before the cards ahead of schedule.
+const LEARN_AHEAD_MS = 20 * 60_000
+
 const localDay = (now: number) => new Date(now).toDateString()
 
 export const newLeftToday = (data: Data, deck: Deck, now: number) => {
@@ -195,57 +191,27 @@ export const counts = (data: Data, now: number) => {
 const byOrder = (data: Data) => (a: Card, b: Card) =>
   (data.notes[a.note]?.order ?? 0) - (data.notes[b.note]?.order ?? 0)
 
-/** The next card of a study session: due cards, then new ones within the daily limit, then learning cards due soon. */
-export const nextStudyCard = (data: Data, now: number, skip?: string): Card | undefined => {
-  const cards = Object.values(data.cards).filter(c => c.id !== skip && data.notes[c.note])
+/**
+ * The next card for the band, or none only when every card is skipped.
+ * By schedule first: due cards, new ones within the daily limit, learning cards due soon.
+ * Then ahead of schedule, so the band never runs dry: new cards past the limit, in deck order,
+ * then the card that comes due soonest.
+ */
+export const nextCard = (data: Data, now: number, skip: ReadonlySet<string> = new Set()): Card | undefined => {
+  const cards = Object.values(data.cards).filter(c => !skip.has(c.id) && data.notes[c.note])
   const due = cards.filter(c => !isNew(c) && c.due <= now).sort((a, b) => a.due - b.due)
   if (due[0]) return due[0]
-  const fresh = cards
-    .filter(c => isNew(c) && newLeftToday(data, data.decks[data.notes[c.note]!.deck]!, now) > 0)
-    .sort(byOrder(data))
-  if (fresh[0]) return fresh[0]
-  return cards.filter(c => isLearning(c) && c.due <= now + 20 * 60_000).sort((a, b) => a.due - b.due)[0]
-}
 
-/** How many times each card was shown in the spinner since its last review, by `passiveKey`. */
-export type Passive = Record<string, number>
+  const fresh = cards.filter(isNew).sort(byOrder(data))
+  const freshToday = fresh.find(c => newLeftToday(data, data.decks[data.notes[c.note]!.deck]!, now) > 0)
+  if (freshToday) return freshToday
 
-/** A review starts the count again: the key carries the time of the last review. */
-export const passiveKey = (card: Card) => `${card.id}@${card.lastReview ?? 0}`
+  const learningSoon = cards.filter(c => isLearning(c) && c.due <= now + LEARN_AHEAD_MS).sort((a, b) => a.due - b.due)
+  if (learningSoon[0]) return learningSoon[0]
 
-/**
- * The card the spinner shows this turn, or none; never the one shown last turn.
- * Cards in learning or due within a day come first, then the next new cards in deck
- * order. A card gives way after `passiveShows` showings since its last review, so the
- * spinner moves through the deck on its own while the schedule waits for real reviews.
- * When every candidate has had its showings, any card the user has met is shown.
- */
-export const pickSpinnerCard = (
-  data: Data,
-  passive: Passive,
-  now: number,
-  last: string | undefined,
-  random: () => number,
-): Face | undefined => {
-  if ((data.meta.pausedUntil ?? 0) > now) return undefined
-  const faces = Object.values(data.cards)
-    .filter(c => c.id !== last)
-    .map(c => face(data, c))
-    .filter((f): f is Face => !!f && f.ask.length <= SPINNER_MAX)
-  const fresh = (f: Face) =>
-    (passive[passiveKey(f.card)] ?? 0) < (data.decks[f.note.deck]?.passiveShows ?? PASSIVE_SHOWS)
-  const choose = (pool: Face[]) => pool[Math.floor(random() * pool.length)]
-  const soon = faces
-    .filter(f => !isNew(f.card) && fresh(f) && (isLearning(f.card) || f.card.due <= now + DAY))
-    .sort((a, b) => a.card.due - b.card.due)
-    .slice(0, ACTIVE_NEW)
-  if (soon.length) return choose(soon)
-  const upcoming = faces
-    .filter(f => isNew(f.card) && fresh(f))
-    .sort((a, b) => byOrder(data)(a.card, b.card))
-    .slice(0, ACTIVE_NEW)
-  if (upcoming.length) return choose(upcoming)
-  return choose(faces.filter(f => !isNew(f.card) || !fresh(f)))
+  const soonest = cards.filter(c => !isNew(c)).sort((a, b) => a.due - b.due)
+
+  return fresh[0] ?? soonest[0]
 }
 
 export type Graded = { card: Card; log: ReviewLog; unlocked?: Card }

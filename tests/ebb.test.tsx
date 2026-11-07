@@ -63,7 +63,15 @@ const disk = (on: On, seed: Record<string, string> = {}, onSleep?: () => void) =
   return { files, dirs, data: () => JSON.parse(files.get(`${DIR}/data.json`)!.text) }
 }
 
+/** Stands for what the plugins beneath ebb draw in the band. */
+const engineBand = (on: On) =>
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+
 const engine = (on: On) => {
+  engineBand(on)
   mock.env(on, { HOME })
   mock.store(on)
   on('command.register', () => ({ value: { command: 'ebb' } }) as never)
@@ -75,45 +83,8 @@ const engine = (on: On) => {
   on('ui.close', () => ({ value: {} }) as never)
 }
 
-/** Stands for the engine's spinner and turn line, which draw what they are handed. */
-const drawsWords = (on: On) =>
-  on('ui.render', ($, e) => {
-    const { Text } = $.ui.resolve(e)
-    return <Text>{String((e.props as { word?: string }).word ?? '')}</Text>
-  })
-
-/** One whole turn: prompt, spinner, turn line, end. Returns the spinner's word and the turn line. (The kit exports no type for `$`.) */
-const turn = async ($: any, n: number) => {
-  await $.prompt.submit(typed(`task ${n}`))
-  await $.turn.start({ text: `task ${n}`, turnId: `t${n}` })
-  const spinner = await $.ui.mount({ ...SPINNER, surface: 'terminal' })
-  const word = (await spinner.find({ type: 'Text' }))?.text ?? ''
-  await spinner.unmount()
-  const row = await $.ui.mount({
-    plugin: 'ebb',
-    component: 'TurnDuration',
-    requestId: `row-${n}`,
-    surface: 'terminal',
-    props: { word: 'Baked', durationMs: 1000 },
-  })
-  const line: string = (await row.find({ type: 'Text' }))?.text ?? ''
-  await row.unmount()
-  await $.turn.complete({ turnId: `t${n}`, answer: '', durationMs: 1000, isAborted: false, reason: 'answer' } as never)
-  return { word, line }
-}
-
-/** A prompt as the person typed it. */
-const typed = (text: string) => ({ text, origin: { kind: 'human' }, wait: false }) as never
-
 /** A typed `/ebb <args>` as the prompt hands it. */
 const ebb = (args: string) => ({ command: 'ebb', args, origin: { kind: 'human' }, presentation: 'normal' }) as never
-
-const SPINNER = {
-  plugin: 'ebb',
-  component: 'Spinner',
-  requestId: 'main',
-  props: { word: 'Sauteing', message: null, suffix: '…', mode: 'thinking' },
-} as const
 
 /** A small Spanish deck file, as `/ebb install` reads it. */
 const deckFile = (
@@ -138,6 +109,37 @@ const withDeck = async ($: any, fs: ReturnType<typeof disk>) => {
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   return $.command.run(ebb('install ~/decks/es.json'))
 }
+
+/** The band above the prompt, as the terminal mounts it. */
+const BAND = {
+  plugin: 'ebb',
+  component: 'AbovePrompt',
+  requestId: 'band',
+  surface: 'terminal',
+  props: {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 10,
+    bodyColumns: 100,
+    scroll: { offset: 0, bodyRows: 10 },
+    view: {},
+  },
+} as const
+
+type Node = { type: string; props?: { bold?: boolean }; children?: (Node | string)[] }
+
+const boldText = (node: Node | string): string | undefined => {
+  if (typeof node === 'string') return undefined
+  if (node.props?.bold) return node.children?.filter(c => typeof c === 'string').join('')
+
+  return node.children?.map(boldText).find(Boolean)
+}
+
+/** The band's bold front, or undefined when the band draws none. */
+const front = async (ui: any): Promise<string | undefined> => boldText(await ui.drawn())
+
+/** Everything the band draws, as one string. */
+const shown = async (ui: any): Promise<string> => JSON.stringify(await ui.drawn())
 
 const PANE = {
   plugin: 'ebb',
@@ -183,111 +185,97 @@ test('/ebb install adds a deck from a file or a URL, and again only what is new'
   expect(fs.dirs.has(`${DIR}/lock`)).toBe(false)
 })
 
-test('without a deck the spinner stays as it is and one turn line says how to get one', async ($, on) => {
+test('without a deck the band says how to get one', async ($, on) => {
   engine(on)
-  drawsWords(on)
   disk(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  const lines: string[] = []
-  for (let n = 0; n < 2; n++) {
-    const { word, line } = await turn($, n)
-    expect(word).toBe('Sauteing')
-    lines.push(line)
-  }
-  expect(lines.filter(l => l.includes('/ebb install'))).toHaveLength(1)
-})
-
-test('a turn puts a card in the spinner and its answer on the turn line', async ($, on) => {
-  engine(on)
-  drawsWords(on)
-  const fs = disk(on)
-  await withDeck($, fs)
-  await $.prompt.submit(typed('fix the build'))
-  await $.turn.start({ text: 'fix the build', turnId: 't1' })
-  const spinner = await $.ui.mount({ ...SPINNER, surface: 'terminal' })
-  const word = (await spinner.find({ type: 'Text' }))?.text ?? ''
-  await spinner.unmount()
-  const shown = (Object.values(fs.data().notes) as { front: string; back: string }[]).find(n => word === n.front)
-  expect(shown).toBeDefined()
-
-  const line = await $.ui.mount({
-    plugin: 'ebb',
-    component: 'TurnDuration',
-    requestId: 'row-1',
-    surface: 'terminal',
-    props: { word: 'Baked', durationMs: 3000 },
-  })
-  const text = (await line.find({ type: 'Text' }))?.text ?? ''
-  expect(text).toContain(`${shown!.front} — ${shown!.back}`)
-  expect(text).toContain('Baked for 3s')
-  await line.unmount()
-
-  const logs = [...fs.files.keys()].filter(p => p.startsWith(`${DIR}/log/`))
-  expect(JSON.parse(fs.files.get(logs[0]!)!.text).exposures).toHaveLength(1)
-})
-
-test('a subagent turn changes nothing', async ($, on) => {
-  engine(on)
-  const fs = disk(on)
-  await withDeck($, fs)
-  await $.turn.start({ text: 'x', turnId: 't2', agentId: 'a1' })
-  expect([...fs.files.keys()].some(p => p.includes('/log/'))).toBe(false)
-})
-
-test('two turns in a row never show the same card', async ($, on) => {
-  engine(on)
-  drawsWords(on)
-  const fs = disk(on)
-  await withDeck($, fs)
-  const words: string[] = []
-  for (let n = 0; n < 12; n++) words.push((await turn($, n)).word)
-  for (let i = 1; i < words.length; i++) expect(words[i]).not.toBe(words[i - 1])
-})
-
-test('a prompt queued during a turn keeps that turn’s card', async ($, on) => {
-  engine(on)
-  drawsWords(on)
-  const fs = disk(on)
-  await withDeck($, fs)
-  await $.prompt.submit(typed('first'))
-  await $.turn.start({ text: 'first', turnId: 'q1' })
-  const before = await $.ui.mount({ ...SPINNER, surface: 'terminal' })
-  const a = (await before.find({ type: 'Text' }))?.text
-  await before.unmount()
-  await $.prompt.submit(typed('queued'))
-  const after = await $.ui.mount({ ...SPINNER, surface: 'terminal' })
-  expect((await after.find({ type: 'Text' }))?.text).toBe(a)
-  await after.unmount()
-})
-
-test('the study pane reveals, grades once on a double press, and logs the review', async ($, on) => {
-  engine(on)
-  const fs = disk(on)
-  await withDeck($, fs)
-  await $.command.run(ebb(''))
-  const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Button', text: /Show answer/ })).toBeDefined()
-  await ui.press({ key: 'reveal' })
-  expect(await ui.find({ type: 'Button', text: /Good/ })).toBeDefined()
-  await Promise.all([ui.press({ key: 'g3' }), ui.press({ key: 'g3' })])
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /\/ebb install/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('the band shows a card, reveals it, grades once on a double press and moves on', async ($, on) => {
+  engine(on)
+  const fs = disk(on)
+  await withDeck($, fs)
+  const ui = await $.ui.mount(BAND)
+  const first = await front(ui)
+  const notes = Object.values(fs.data().notes) as { front: string; back: string }[]
+  const note = notes.find(n => n.front === first)!
+  expect(note).toBeDefined()
+  expect(await shown(ui)).not.toContain(note.back)
+
+  await ui.press({ key: 'show' })
+  expect(await shown(ui)).toContain(note.back)
+  await Promise.all([ui.press({ key: 'g1' }), ui.press({ key: 'g1' })])
+
   const cards = Object.values(fs.data().cards) as { reps: number }[]
   expect(cards.reduce((n, c) => n + c.reps, 0)).toBe(1)
   const log = [...fs.files.entries()].find(([p]) => p.includes('/log/'))!
   expect(JSON.parse(log[1].text).reviews).toHaveLength(1)
+  expect(await front(ui)).not.toBe(first)
+  await ui.unmount()
 })
 
-test('the card just graded Again does not come straight back', async ($, on) => {
+test('skip shows another card and changes no schedule', async ($, on) => {
   engine(on)
   const fs = disk(on)
   await withDeck($, fs)
-  await $.command.run(ebb(''))
-  const ui = await $.ui.mount(PANE)
-  const first = (await ui.find({ type: 'Text', bold: true } as never))?.text
-  await ui.press({ key: 'reveal' })
-  await ui.press({ key: 'g1' })
-  expect((await ui.find({ type: 'Text', bold: true } as never))?.text).not.toBe(first)
+  const ui = await $.ui.mount(BAND)
+  const first = await front(ui)
+  await ui.press({ key: 'skip' })
+  expect(await front(ui)).not.toBe(first)
+  const cards = Object.values(fs.data().cards) as { reps: number }[]
+  expect(cards.reduce((n, c) => n + c.reps, 0)).toBe(0)
   await ui.unmount()
+})
+
+test('pause hides the band, and a survey has the band to itself', async ($, on) => {
+  engine(on)
+  const fs = disk(on)
+  await withDeck($, fs)
+  const survey = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true } })
+  expect(await shown(survey)).toContain('engine')
+  await survey.unmount()
+  await $.command.run(ebb('pause 1h'))
+  const ui = await $.ui.mount(BAND)
+  expect(await shown(ui)).toContain('engine')
+  await ui.unmount()
+})
+
+test('the band keeps what other plugins draw there and puts the card under it', async ($, on) => {
+  engine(on)
+  const fs = disk(on)
+  await withDeck($, fs)
+  const ui = await $.ui.mount(BAND)
+  const text = await shown(ui)
+  expect(text).toContain('engine')
+  expect(await front(ui)).toBeDefined()
+  expect(text.indexOf('engine')).toBeLessThan(text.indexOf((await front(ui))!))
+  await ui.unmount()
+})
+
+test('the footer button hides the band and shows it again, also in the next session', async ($, on) => {
+  engine(on)
+  on('ui.render', { component: 'SessionMode' }, () => ({ type: 'Text', props: {}, children: [] }) as never)
+  const fs = disk(on)
+  await withDeck($, fs)
+  const footer = await $.ui.mount({ ...BAND, component: 'SessionMode', requestId: 'footer', props: { modes: [] } })
+  await footer.press({ key: 'ebb-band' })
+  const hidden = await $.ui.mount(BAND)
+  expect(await shown(hidden)).toContain('engine')
+  await hidden.unmount()
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const again = await $.ui.mount(BAND)
+  expect(await shown(again)).toContain('engine')
+  await again.unmount()
+
+  await footer.press({ key: 'ebb-band' })
+  const back = await $.ui.mount(BAND)
+  expect(await front(back)).toBeDefined()
+  await back.unmount()
+  await footer.unmount()
 })
 
 test('a stale lock of a dead session is taken over', async ($, on) => {
@@ -435,18 +423,4 @@ test('/ebb add @deck makes a deck of facts that asks one way', async ($, on) => 
   const data = fs.data()
   expect(data.decks.k8s.kinds).toEqual(['recognition'])
   expect((Object.values(data.notes) as { deck: string }[]).filter(n => n.deck === 'k8s')).toHaveLength(1)
-})
-
-test('the spinner has the next card before the prompt’s hooks run', async ($, on) => {
-  engine(on)
-  drawsWords(on)
-  const fs = disk(on)
-  await withDeck($, fs)
-  await turn($, 0)
-  const early = await $.ui.mount({ ...SPINNER, surface: 'terminal' })
-  const before = (await early.find({ type: 'Text' }))?.text
-  await early.unmount()
-  const fronts = (Object.values(fs.data().notes) as { front: string }[]).map(n => n.front)
-  expect(fronts).toContain(before)
-  expect((await turn($, 1)).word).toBe(before)
 })

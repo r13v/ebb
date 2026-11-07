@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 
-import type { Candidate, NewDeck, View } from '../types'
+import type { Band, Candidate, NewDeck, View } from '../types'
 import { parseDeckFile } from './decks'
 import { formatDelay, type Rating, scheduler } from './fsrs'
 import {
@@ -11,7 +11,6 @@ import {
   generationPrompt,
   parseDeckReply,
   parseNotes,
-  questionPrompt,
 } from './generate'
 import {
   addNotes,
@@ -20,18 +19,12 @@ import {
   type Deck,
   emptyData,
   ensureDeck,
-  type Face,
   face,
   grade,
-  type Kind,
   type MonthLog,
   monthKey,
-  newLeftToday,
-  nextStudyCard,
-  type Passive,
+  nextCard,
   parseDuration,
-  passiveKey,
-  pickSpinnerCard,
   upgrade,
 } from './model'
 
@@ -39,16 +32,24 @@ type $ = EngineInterface
 
 const PANE = 'ebb'
 const MODEL = 'sonnet'
-const view = atom(
-  { plugin: 'ebb', key: 'view' } as const,
-  { mode: 'study', cardId: null, isRevealed: false, shownAt: 0, isAsking: false } as View,
-  {
-    shape: 'view-1',
-  },
-)
 
-// The word the spinner draws this turn; a state value, so a change redraws the spinner.
-const spinnerWord = atom({ plugin: 'ebb', key: 'spinner' } as const, null as string | null, { shape: 'spinner-1' })
+// The pane of `/ebb add`; null while it shows nothing.
+const view = atom({ plugin: 'ebb', key: 'view' } as const, null as View | null, { shape: 'view-2' })
+
+// The card above the prompt; a state value, so a change redraws the band.
+const band = atom({ plugin: 'ebb', key: 'band' } as const, { cardId: null, isRevealed: false, shownAt: 0 } as Band, {
+  shape: 'band-1',
+})
+
+// Whether the person hid the band with the footer button; kept in `$.store` across sessions.
+const isHidden = atom({ plugin: 'ebb', key: 'hidden' } as const, false, { shape: 'hidden-1' })
+const HIDDEN_KEY = 'hidden'
+
+const toggleBand = async ($: $) => {
+  const hidden = !(await read($, isHidden))
+  await update($, isHidden, () => hidden)
+  await $.store.set(HIDDEN_KEY, hidden)
+}
 
 // One id per loaded module: this session's own log file, which no other session writes.
 const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -63,7 +64,6 @@ const homeDir = async ($: $) => {
 }
 const dir = async ($: $) => `${await homeDir($)}/.claude/ebb`
 const dataPath = async ($: $) => `${await dir($)}/data.json`
-const passivePath = async ($: $) => `${await dir($)}/passive.json`
 
 let cache: { data: Data; mtimeMs: number } | undefined
 
@@ -138,25 +138,14 @@ const mutate = <T,>($: $, change: (data: Data) => T): Promise<T> =>
     }
   })
 
-/** Counts one spinner showing in `passive.json`, a small file of its own, so a turn never rewrites `data.json`. */
-const countShowing = ($: $, key: string) =>
-  withLock($, async () => {
-    const path = await passivePath($)
-    const passive: Passive = (await $.fs.exists(path)) ? JSON.parse(await $.fs.read(path)) : {}
-    passive[key] = (passive[key] ?? 0) + 1
-    await replaceFile($, path, JSON.stringify(passive))
-  })
-
 let log: { key: string; value: MonthLog } | undefined
 let logWrite: Promise<void> = Promise.resolve()
 
-/** Appends to this session's own log for the month: exposures and reviews. */
-const appendLog = async ($: $, entry: Partial<MonthLog>) => {
-  const now = Date.now()
-  const path = `${await dir($)}/log/${monthKey(now)}/${sessionId}.json`
-  if (log?.key !== path) log = { key: path, value: { reviews: [], exposures: [] } }
-  log.value.reviews.push(...(entry.reviews ?? []))
-  log.value.exposures.push(...(entry.exposures ?? []))
+/** Appends a review to this session's own log for the month. */
+const appendLog = async ($: $, review: MonthLog['reviews'][number]) => {
+  const path = `${await dir($)}/log/${monthKey(review.ts)}/${sessionId}.json`
+  if (log?.key !== path) log = { key: path, value: { reviews: [] } }
+  log.value.reviews.push(review)
   const text = JSON.stringify(log.value)
   // Writes go one after another, so an older snapshot never lands after a newer one.
   logWrite = logWrite.catch(() => undefined).then(() => $.fs.write(path, text))
@@ -187,7 +176,8 @@ const installDeck = async ($: $, where: string): Promise<string> => {
     ensureDeck(d, file.deck)
     return addNotes(d, file.deck.id, file.notes, `install: ${where}`, Date.now(), true)
   })
-  return `Installed ${file.deck.name}: ${added} new notes. Cards start showing in the spinner; review them with /ebb.`
+  await showNextCard($)
+  return `Installed ${file.deck.name}: ${added} new notes. Its cards show above the prompt.`
 }
 
 const listDecks = async ($: $): Promise<string> => {
@@ -206,165 +196,107 @@ const listDecks = async ($: $): Promise<string> => {
   ].join('\n')
 }
 
-// ---------- spinner and end of turn ----------
+// ---------- the band above the prompt ----------
 
-type Reveal = { face: Face; due: number } | { hint: string }
-let current: Reveal | undefined
-let pending: Reveal | undefined
-const reveals = new Map<string, Reveal | null>()
+// Cards skipped in this session; they come back when nothing else is left.
+const skipped = new Set<string>()
 
-let isChosenForTurn = false
-let isTurnRunning = false
-let lastShownId: string | undefined
-const recentPrompts: string[] = []
-
-let upcoming: Face | undefined
-
-/**
- * Chooses the next turn's card ahead, at session start and when a turn ends, and puts it in
- * the spinner then: so the spinner shows it from its first frame, before any hook of the prompt.
- */
-const prepareNextCard = async ($: $) => {
-  try {
-    const data = await load($)
-    const path = await passivePath($)
-    const passive: Passive = (await $.fs.exists(path)) ? JSON.parse(await $.fs.read(path)) : {}
-    upcoming = pickSpinnerCard(data, passive, Date.now(), lastShownId, Math.random)
-  } catch (error) {
-    upcoming = undefined
-    $.ui.log(`ebb: ${String(error)}`, { to: 'debug' })
-  }
-  await update($, spinnerWord, () => upcoming?.ask ?? null)
-}
-
-/** Takes this turn's card (the one prepared ahead, or a new pick), counts and logs the showing, and keeps its reveal for the turn line. */
+/** Puts the next card in the band, with its answer hidden. */
 const showNextCard = async ($: $) => {
   try {
     const data = await load($)
     const now = Date.now()
-    if (!Object.keys(data.decks).length) {
-      // No deck yet: say once, on a turn line, how to get one.
-      if (!(await $.store.get('hinted'))) {
-        await $.store.set('hinted', true)
-        pending = { hint: 'ebb: /ebb add <topic> or /ebb install <file or URL> to get cards' }
-      }
-      return
+    let card = nextCard(data, now, skipped)
+    if (!card && skipped.size) {
+      skipped.clear()
+      card = nextCard(data, now)
     }
-    let picked = upcoming && data.cards[upcoming.card.id] ? upcoming : undefined
-    upcoming = undefined
-    if (!picked) {
-      const path = await passivePath($)
-      const passive: Passive = (await $.fs.exists(path)) ? JSON.parse(await $.fs.read(path)) : {}
-      picked = pickSpinnerCard(data, passive, now, lastShownId, Math.random)
-    }
-    if ((data.meta.pausedUntil ?? 0) > now) picked = undefined
-    if (picked) {
-      lastShownId = picked.card.id
-      await countShowing($, passiveKey(picked.card))
-    }
-    current = picked && { face: picked, due: counts(data, now).due }
-    pending = current
-    await update($, spinnerWord, () => picked?.ask ?? null)
-    if (picked) await appendLog($, { exposures: [{ ts: now, card: picked.card.id }] })
+    await update($, band, (): Band => ({ cardId: card?.id ?? null, isRevealed: false, shownAt: now }))
   } catch (error) {
-    current = pending = undefined
-    await update($, spinnerWord, () => null)
+    await update($, band, (): Band => ({ cardId: null, isRevealed: false, shownAt: 0 }))
     $.ui.log(`ebb: ${String(error)}`, { to: 'debug' })
   }
 }
 
-const durationText = (ms: number) => {
-  const s = Math.round(ms / 1000)
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
-}
+const reveal = ($: $) => update($, band, old => ({ ...old, isRevealed: true }))
 
-// ---------- study pane ----------
-
-const openStudy = async ($: $, note?: string) => {
-  const data = await load($)
-  const card = nextStudyCard(data, Date.now())
-  await update(
-    $,
-    view,
-    (): View => ({
-      mode: 'study',
-      cardId: card?.id ?? null,
-      isRevealed: false,
-      shownAt: Date.now(),
-      isAsking: false,
-      note,
-    }),
-  )
-  await $.ui.open({ id: PANE, title: 'ebb', focus: true, closeOnEscape: true })
+const skip = async ($: $) => {
+  const { cardId } = await read($, band)
+  if (cardId) skipped.add(cardId)
+  await showNextCard($)
 }
 
 let isGrading = false
 
 const gradeCurrent = async ($: $, rating: Rating) => {
-  const v = await read($, view)
-  if (isGrading || v.mode !== 'study' || !v.cardId || !v.isRevealed) return
+  const b = await read($, band)
+  if (isGrading || !b.cardId || !b.isRevealed) return
   isGrading = true // a second press while this one saves is ignored
-  const cardId = v.cardId
+  const cardId = b.cardId
   try {
-    const graded = await mutate($, data => grade(data, cardId, rating, Date.now(), Math.random, Date.now() - v.shownAt))
-    await appendLog($, { reviews: [graded.log] })
-    const data = await load($)
-    const next = nextStudyCard(data, Date.now(), cardId)
-    const note = graded.unlocked ? `New reverse card: ${face(data, graded.unlocked)?.ask}` : undefined
-    await update(
-      $,
-      view,
-      (): View => ({
-        mode: 'study',
-        cardId: next?.id ?? null,
-        isRevealed: false,
-        shownAt: Date.now(),
-        isAsking: false,
-        note,
-      }),
-    )
+    const graded = await mutate($, data => grade(data, cardId, rating, Date.now(), Math.random, Date.now() - b.shownAt))
+    await appendLog($, graded.log)
+    skipped.delete(cardId)
+    await showNextCard($)
   } catch (error) {
-    await update($, view, old =>
-      old.mode === 'study' ? { ...old, note: `The grade was not saved: ${String(error)}` } : old,
-    )
+    $.ui.toast(`ebb: the grade was not saved: ${String(error)}`)
   } finally {
     isGrading = false
   }
 }
 
-const askQuestion = async ($: $, question: string) => {
-  const v = await read($, view)
-  if (v.mode !== 'study' || !v.cardId || !question.trim()) return
-  const data = await load($)
-  const card = data.cards[v.cardId]
-  const f = card && face(data, card)
-  if (!f) return
-  await update($, view, old => (old.mode === 'study' ? { ...old, isAsking: false, reply: '…' } : old))
-  const deck = data.decks[f.note.deck]!
-  const r = await $.model
-    .complete({
-      model: MODEL,
-      ...questionPrompt(deck, f.ask, f.answer, f.hint, question),
-      maxTokens: 600,
-      timeoutMs: 60_000,
-    })
-    .catch((error: unknown) => ({ isAnswered: false as const, reason: String(error) }))
-  const reply = r.isAnswered ? r.text.trim() : `Could not ask: ${r.reason}`
-  await update($, view, old => (old.mode === 'study' && old.cardId === v.cardId ? { ...old, reply } : old))
-}
+const GRADE_LABELS = ['Again', 'Hard', 'Good', 'Easy']
 
-/** Shows the question field and moves the keys into it, so typing never lands in the prompt. */
-const startAsking = async ($: $) => {
-  await update($, view, old => (old.mode === 'study' ? { ...old, isAsking: true, reply: undefined } : old))
-  await $.ui.focus({ requestId: PANE, key: 'question' })
+/** The card in the band, or nothing while the cards are paused or none is chosen. */
+const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve']>) => {
+  let data: Data
+  try {
+    data = await load($)
+  } catch (error) {
+    return <Text color="red">ebb: cannot read the data: {String(error)}</Text>
+  }
+  if (!Object.keys(data.decks).length)
+    return <Text dimColor>ebb: /ebb add &lt;topic&gt; or /ebb install &lt;file or URL&gt; to get cards</Text>
+
+  const now = Date.now()
+  const b = await read($, band)
+  const card = b.cardId ? data.cards[b.cardId] : undefined
+  const f = card && face(data, card)
+  if ((data.meta.pausedUntil ?? 0) > now || !f) return undefined
+
+  if (!b.isRevealed)
+    return (
+      <Box gap={2} flexWrap="wrap">
+        <Text bold>{f.ask}</Text>
+        <Button key="show" hotkey="r" variant="primary" label="Show" onPress={() => void reveal($)} />
+        <Button key="skip" hotkey="s" label="Skip" onPress={() => void skip($)} />
+      </Box>
+    )
+
+  const intervals = scheduler().preview(f.card, now)
+  return (
+    <Box gap={2} flexWrap="wrap">
+      <Text>
+        <Text bold>{f.ask}</Text> — {f.answer}
+      </Text>
+      {intervals.map(({ rating, due }, i) => (
+        <Button
+          key={`g${rating}`}
+          hotkey={String(rating)}
+          label={`${GRADE_LABELS[i]} ${formatDelay(due - now)}`}
+          onPress={() => void gradeCurrent($, rating)}
+        />
+      ))}
+    </Box>
+  )
 }
 
 // ---------- adding notes ----------
 
-const setAdd = ($: $, change: Partial<Extract<View, { mode: 'add' }>>) =>
-  update($, view, old => (old.mode === 'add' ? { ...old, ...change } : old))
+// The person's last prompts: `/ebb add` reads their own language from them.
+const recentPrompts: string[] = []
+
+const setAdd = ($: $, change: Partial<View>) => update($, view, old => (old ? { ...old, ...change } : old))
 
 /** The deck a new deck becomes: a language deck asks both ways, a deck of facts one way. */
 const deckFrom = (d: NewDeck): Partial<Deck> & { id: string; name: string } =>
@@ -429,7 +361,6 @@ const startAdd = async ($: $, args: string) => {
     $,
     view,
     (): View => ({
-      mode: 'add',
       deck: existing?.id ?? named?.[1] ?? '',
       topic,
       candidates: [],
@@ -461,7 +392,7 @@ const startAdd = async ($: $, args: string) => {
 
 const setNative = async ($: $, native: string) => {
   const v = await read($, view)
-  if (v.mode !== 'add' || !v.newDeck || !native.trim()) return
+  if (!v?.newDeck || !native.trim()) return
   const newDeck = { ...v.newDeck, native: native.trim() }
   await setAdd($, { newDeck })
   await generate($, newDeck, v.topic)
@@ -469,13 +400,16 @@ const setNative = async ($: $, native: string) => {
 
 const commitAdd = async ($: $) => {
   const v = await read($, view)
-  if (v.mode !== 'add') return
+  if (!v) return
   const chosen = v.candidates.filter(c => c.isChecked && !c.isDuplicate)
   const added = await mutate($, data => {
     if (v.newDeck) ensureDeck(data, deckFrom(v.newDeck))
     return addNotes(data, v.deck, chosen, `ebb add: ${v.topic}`, Date.now())
   })
-  await openStudy($, `Notes added: ${added}`)
+  await $.ui.close({ id: PANE })
+  await update($, view, () => null)
+  await showNextCard($)
+  $.ui.toast(`ebb: notes added: ${added}`)
 }
 
 // ---------- commands ----------
@@ -487,54 +421,52 @@ const checkbox = (c: Candidate) => {
   return c.isChecked ? '[x]' : '[ ]'
 }
 
-/** The line above the front of a card in the study pane. */
-const cardQuestion = (kind: Kind, learn: string | undefined) => {
-  if (kind === 'production') return `say it in ${learn ?? 'the deck language'}`
-
-  return learn ? 'what does it mean?' : 'recall the answer'
-}
-
-const HELP = `/ebb — review cards
-/ebb decks — your decks
+const HELP = `/ebb decks — your decks
 /ebb install <file or URL> — add a deck file
 /ebb add [@deck] <topic or word list> — write new notes with Claude; a new @deck is made on first use
-/ebb pause [1h|30m|2d|off] — no cards in the spinner for a while
+/ebb pause [1h|30m|2d|off] — no card above the prompt for a while
 /ebb stats — notes, due cards and new cards`
 
-const runCommand = async ($: $, args: string): Promise<string | undefined> => {
+const stats = async ($: $) => {
+  const data = await load($)
+  const c = counts(data, Date.now())
+  const paused = (data.meta.pausedUntil ?? 0) > Date.now() ? ' · paused' : ''
+
+  return `Notes: ${Object.keys(data.notes).length} · due: ${c.due} · new: ${c.new}${paused}`
+}
+
+const pause = async ($: $, tail: string) => {
+  if (tail === 'off') {
+    await mutate($, data => void delete data.meta.pausedUntil)
+    return 'Cards are back above the prompt.'
+  }
+  const ms = tail ? parseDuration(tail) : 3_600_000
+  if (!ms) return 'Use /ebb pause 1h, 30m, 2d or off'
+
+  const until = Date.now() + ms
+  await mutate($, data => {
+    data.meta.pausedUntil = until
+  })
+
+  return `Paused until ${new Date(until).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}.`
+}
+
+const runCommand = async ($: $, args: string): Promise<string> => {
   const [sub = '', ...rest] = args.trim().split(/\s+/)
   const tail = rest.join(' ')
   switch (sub) {
-    case '':
-      await openStudy($)
-      return undefined
     case 'decks':
       return listDecks($)
     case 'install':
       return installDeck($, tail)
     case 'add':
       return tail ? startAdd($, tail) : 'Name a topic: /ebb add ordering at a bar'
-    case 'pause': {
-      if (tail === 'off') {
-        await mutate($, data => void delete data.meta.pausedUntil)
-        return 'Cards are back in the spinner.'
-      }
-      const ms = tail ? parseDuration(tail) : 3_600_000
-      if (!ms) return 'Use /ebb pause 1h, 30m, 2d or off'
-      const until = Date.now() + ms
-      await mutate($, data => {
-        data.meta.pausedUntil = until
-      })
-      return `Paused until ${new Date(until).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}.`
-    }
-    case 'stats': {
-      const data = await load($)
-      const c = counts(data, Date.now())
-      const paused = (data.meta.pausedUntil ?? 0) > Date.now() ? ' · paused' : ''
-      return `Notes: ${Object.keys(data.notes).length} · due: ${c.due} · new: ${c.new}${paused}`
-    }
+    case 'pause':
+      return pause($, tail)
+    case 'stats':
+      return stats($)
     default:
-      return HELP
+      return `${await stats($)}\n\n${HELP}`
   }
 }
 
@@ -543,10 +475,12 @@ const runCommand = async ($: $, args: string): Promise<string | undefined> => {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    await prepareNextCard($)
+    const hidden = (await $.store.get(HIDDEN_KEY)) === true
+    await update($, isHidden, () => hidden)
+    await showNextCard($)
     await $.command.register({
       name: 'ebb',
-      description: 'Spaced repetition: review, add, install, decks, pause, stats',
+      description: 'Spaced repetition above the prompt: add, install, decks, pause, stats',
       argumentHint: '[add <topic> | install <file or URL> | decks | pause 1h | stats]',
     })
     return started
@@ -554,229 +488,104 @@ export const register: Register = on => {
 
   on('command.run', { command: 'ebb' }, async ($, e) => {
     const text = await runCommand($, e.args).catch(error => `ebb: ${String(error)}`)
-    return text === undefined ? {} : { text }
+    return { text }
   })
 
-  // The card is chosen when the prompt is sent, the start of the wait, and kept for the whole turn.
-  on('prompt.submit', async ($, e, next) => {
-    // A slash command starts no model turn of its own; a prompt queued during a turn keeps that turn's card.
-    if (e.command || e.text.trimStart().startsWith('/') || isTurnRunning) return next(e)
-    recentPrompts.push(e.text.slice(0, 300))
-    if (recentPrompts.length > 3) recentPrompts.shift()
-    await showNextCard($)
-    isChosenForTurn = true
+  on('prompt.submit', async (_, e, next) => {
+    if (!e.command && !e.text.trimStart().startsWith('/')) {
+      recentPrompts.push(e.text.slice(0, 300))
+      if (recentPrompts.length > 3) recentPrompts.shift()
+    }
     return next(e)
   })
 
-  on('turn.start', async ($, e, next) => {
-    if (e.agentId !== undefined) return next(e)
-    if (!isChosenForTurn) await showNextCard($) // a turn no prompt chose for, such as a queued prompt or a task notification
-    isChosenForTurn = false
-    isTurnRunning = true
-    return next(e)
-  })
-
+  // A card may have come due while Claude worked; an open answer stays as it is.
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) {
-      isTurnRunning = false
-      current = undefined
-      await prepareNextCard($)
-    }
+    if (e.agentId === undefined && !(await read($, band)).isRevealed) await showNextCard($)
     return next(e)
   })
 
-  on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
-    const word = await read($, spinnerWord)
-    return word ? next({ ...e, props: { ...e.props, word } }) : next(e)
+  // The footer button beside the mode labels shows or hides the band.
+  on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
+    const rest = await next(e)
+    const { Box, Button } = $.ui.resolve(e)
+
+    return (
+      <Box gap={1}>
+        {rest}
+        <Button key="ebb-band" label="🌊 ebb" plain onPress={() => void toggleBand($)} />
+      </Box>
+    )
   })
 
-  on('ui.render', { component: 'TurnDuration' }, ($, e, next) => {
-    if (e.props.isExpanded || e.props.waitingFor) return next(e)
-    if (!reveals.has(e.requestId)) {
-      reveals.set(e.requestId, pending ?? null)
-      pending = undefined
-      if (reveals.size > 300) reveals.delete(reveals.keys().next().value!)
-    }
-    const reveal = reveals.get(e.requestId)
-    if (!reveal) return next(e)
-    const { Text } = $.ui.resolve(e)
-    const line = `✻ ${e.props.word} for ${durationText(e.props.durationMs)} · `
-    if ('hint' in reveal)
-      return (
-        <Text dimColor>
-          {line}
-          {reveal.hint}
-        </Text>
-      )
-    const { ask, answer } = reveal.face
+  // The band is shared: what the plugins beneath draw (`next(e)`) stays, and the card goes under it.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || (await read($, isHidden))) return next(e)
+
+    const rest = await next(e)
+    const card = await cardTree($, $.ui.resolve(e))
+    if (!card) return rest
+
+    const { Box } = $.ui.resolve(e)
+
     return (
-      <Text dimColor>
-        {line}
-        <Text dimColor={false}>
-          {ask} — {answer}
-        </Text>
-        {reveal.due ? ` · ${reveal.due} due · /ebb` : ''}
-      </Text>
+      <Box flexDirection="column">
+        {rest}
+        {card}
+      </Box>
     )
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Input } = $.ui.resolve(e)
     const v = await read($, view)
+    if (!v) return <Text dimColor>Nothing to add. Use /ebb add &lt;topic&gt;.</Text>
 
-    if (v.mode === 'add') {
-      const toggle = (i: number) =>
-        void update($, view, old =>
-          old.mode === 'add'
-            ? {
-                ...old,
-                candidates: old.candidates.map((c, j) =>
-                  j === i && !c.isDuplicate ? { ...c, isChecked: !c.isChecked } : c,
-                ),
-              }
-            : old,
-        )
-      const chosen = v.candidates.filter(c => c.isChecked && !c.isDuplicate).length
-      const newDeck = v.newDeck
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text bold>New notes: {v.topic}</Text>
-          {v.status && <Text dimColor>{v.status}</Text>}
-          {newDeck?.learn && !newDeck.native && (
-            <Input
-              key="native"
-              label={`Translate ${newDeck.learn} into which language?`}
-              placeholder="for example: English"
-              autoFocus
-              onSubmit={value => void setNative($, value)}
-            />
-          )}
-          <Box flexDirection="column">
-            {v.candidates.map((c, i) => (
-              <Button key={`c${i}`} hotkey={String(i + 1)} onPress={() => toggle(i)}>
-                {checkbox(c)} {c.front} — {c.back}
-                {c.hint ? ` (${c.hint})` : ''}
-                {c.flag ? ` ⚠ ${c.flag}` : ''}
-              </Button>
-            ))}
-          </Box>
-          {v.candidates.length > 0 && (
-            <Box gap={2}>
-              <Button key="add" hotkey="a" variant="primary" onPress={() => void commitAdd($)}>
-                Add ticked ({chosen})
-              </Button>
-              <Button key="cancel" hotkey="x" onPress={() => void $.ui.close({ id: PANE })}>
-                Cancel
-              </Button>
-            </Box>
-          )}
-        </Box>
+    const toggle = (i: number) =>
+      void update($, view, old =>
+        old
+          ? {
+              ...old,
+              candidates: old.candidates.map((c, j) =>
+                j === i && !c.isDuplicate ? { ...c, isChecked: !c.isChecked } : c,
+              ),
+            }
+          : old,
       )
-    }
-
-    let data: Data
-    try {
-      data = await load($)
-    } catch (error) {
-      return <Text color="red">ebb: cannot read the data: {String(error)}</Text>
-    }
-    const now = Date.now()
-    const c = counts(data, now)
-    const header = (
-      <Text dimColor>
-        due: {c.due} · new today:{' '}
-        {Math.min(
-          c.new,
-          Object.values(data.decks).reduce((n, d) => n + newLeftToday(data, d, now), 0),
-        )}
-        {(data.meta.pausedUntil ?? 0) > now ? ' · spinner paused' : ''}
-      </Text>
-    )
-    if (!Object.keys(data.decks).length) {
-      return (
-        <Box flexDirection="column" gap={1}>
-          <Text bold>No deck yet.</Text>
-          <Text dimColor>
-            Make one with /ebb add &lt;topic&gt;, or install a deck file with /ebb install &lt;file or URL&gt;.
-          </Text>
-        </Box>
-      )
-    }
-    const card = v.cardId ? data.cards[v.cardId] : undefined
-    const f = card && face(data, card)
-    if (!f) {
-      const soon = Object.values(data.cards)
-        .filter(x => x.state !== 0)
-        .sort((a, b) => a.due - b.due)[0]
-      return (
-        <Box flexDirection="column" gap={1}>
-          {header}
-          {v.note && <Text color="green">{v.note}</Text>}
-          <Text bold>All done for now.</Text>
-          {soon && <Text dimColor>Next review in {formatDelay(Math.max(0, soon.due - now))}.</Text>}
-          <Text dimColor>New notes: /ebb add &lt;topic&gt;</Text>
-        </Box>
-      )
-    }
-
-    const deck = data.decks[f.note.deck]
-    const intervals = scheduler().preview(f.card, now)
-    const labels = ['Again', 'Hard', 'Good', 'Easy']
-    const kind = cardQuestion(f.card.kind, deck?.learn)
+    const chosen = v.candidates.filter(c => c.isChecked && !c.isDuplicate).length
+    const newDeck = v.newDeck
     return (
       <Box flexDirection="column" gap={1}>
-        {header}
-        {v.note && <Text color="green">{v.note}</Text>}
-        <Box flexDirection="column">
-          <Text dimColor>{kind}</Text>
-          <Text bold>{f.ask}</Text>
-          {v.isRevealed && <Text>{f.answer}</Text>}
-          {v.isRevealed && f.hint && <Text dimColor>{f.hint}</Text>}
-        </Box>
-        {!v.isAsking &&
-          (v.isRevealed ? (
-            <Box gap={2} flexWrap="wrap">
-              {intervals.map(({ rating, due }, i) => (
-                <Button
-                  key={`g${rating}`}
-                  hotkey={String(rating)}
-                  autoFocus={rating === 3 ? true : undefined}
-                  onPress={() => void gradeCurrent($, rating)}
-                >
-                  {labels[i]} {formatDelay(due - now)}
-                </Button>
-              ))}
-            </Box>
-          ) : (
-            <Box gap={2}>
-              <Button
-                key="reveal"
-                hotkey="r"
-                variant="primary"
-                autoFocus
-                onPress={() => void update($, view, old => (old.mode === 'study' ? { ...old, isRevealed: true } : old))}
-              >
-                Show answer
-              </Button>
-              <Button key="ask" hotkey="q" onPress={() => void startAsking($)}>
-                Ask
-              </Button>
-            </Box>
-          ))}
-        {v.isRevealed && !v.isAsking && (
-          <Button key="ask-after" hotkey="q" onPress={() => void startAsking($)}>
-            Ask about this card
-          </Button>
-        )}
-        {v.isAsking && (
+        <Text bold>New notes: {v.topic}</Text>
+        {v.status && <Text dimColor>{v.status}</Text>}
+        {newDeck?.learn && !newDeck.native && (
           <Input
-            key="question"
-            placeholder="A question about this card…"
+            key="native"
+            label={`Translate ${newDeck.learn} into which language?`}
+            placeholder="for example: English"
             autoFocus
-            onSubmit={value => void askQuestion($, value)}
+            onSubmit={value => void setNative($, value)}
           />
         )}
-        {v.reply && <Text>{v.reply}</Text>}
+        <Box flexDirection="column">
+          {v.candidates.map((c, i) => (
+            <Button key={`c${i}`} hotkey={String(i + 1)} onPress={() => toggle(i)}>
+              {checkbox(c)} {c.front} — {c.back}
+              {c.hint ? ` (${c.hint})` : ''}
+              {c.flag ? ` ⚠ ${c.flag}` : ''}
+            </Button>
+          ))}
+        </Box>
+        {v.candidates.length > 0 && (
+          <Box gap={2}>
+            <Button key="add" hotkey="a" variant="primary" onPress={() => void commitAdd($)}>
+              Add ticked ({chosen})
+            </Button>
+            <Button key="cancel" hotkey="x" onPress={() => void $.ui.close({ id: PANE })}>
+              Cancel
+            </Button>
+          </Box>
+        )}
       </Box>
     )
   })

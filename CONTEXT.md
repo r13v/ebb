@@ -25,16 +25,16 @@ _Avoid_: Forward card
 **Production card**: The card that shows the meaning and asks for the target-language side with its article (RU→ES). It unlocks when the recognition card is stable enough.
 _Avoid_: Reverse card
 
-**Exposure**: A passive showing of a card in the spinner while Claude works, with its answer at the end of the turn. It never changes the schedule.
-_Avoid_: Impression, passive review
+**Review**: A graded answer to a card (Again, Hard, Good or Easy) in the band. Only reviews change the schedule.
+_Avoid_: Practice
 
-**Review**: A graded answer to a card (Again, Hard, Good or Easy) in a study session. Only reviews change the schedule.
-_Avoid_: Exposure, practice
+**Band**: The line above the prompt that shows one card at a time, where the user reveals, grades or skips it.
+_Avoid_: Study pane, study session, widget
 
-**Study session**: The on-demand pane opened by `/ebb`, where the user reviews due cards and meets new ones.
-_Avoid_: Lesson, quiz
+**Skip**: Putting the card in the band aside for this session without a review; it comes back when no other card is left.
+_Avoid_: Bury, postpone
 
-**Reveal**: Showing the answer side of a card, at the end of a turn for an exposure or on request in a study session.
+**Reveal**: Showing the answer side of the card in the band, on the user's request.
 _Avoid_: Flip
 
 **Due card**: A card whose scheduled time has come.

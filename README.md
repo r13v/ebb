@@ -4,9 +4,9 @@ ebb is a Claude Code mod for spaced repetition. It teaches you words, phrases or
 
 Site and decks: <https://r13v.github.io/ebb/>
 
-- While Claude works, the spinner shows one card, for example `el corazón`.
-- When the turn ends, the turn line shows the answer: `✻ Baked for 12s · el corazón — heart · 7 due · /ebb`.
-- You grade cards only when you open a study session with `/ebb`. ebb never interrupts you.
+- A band above the prompt shows one card: `el corazón  [ Show ]  [ Skip ]`.
+- Show the answer, then grade the card: `el corazón — heart  [ Again 1m ]  [ Hard 6m ]  [ Good 10m ]  [ Easy 2d ]`. The next card comes at once.
+- You can do it while Claude works, or ignore the band. The `🌊 ebb` button under the prompt hides the band and shows it again. ebb never interrupts you.
 
 The scheduler is FSRS-6, the algorithm that Anki uses.
 
@@ -69,20 +69,21 @@ A deck file is JSON:
 
 | Command | Result |
 |---|---|
-| `/ebb` | Opens the study pane. |
+| `/ebb` | Shows the counts and the commands. |
 | `/ebb install <file or URL>` | Adds a deck file, or the new notes of a deck file you installed before. |
 | `/ebb decks` | Lists your decks with their cards, due cards and new cards. |
 | `/ebb add <topic>` | Claude writes up to 9 new notes on the topic. In a language deck, a second model call translates each note back and flags the notes that do not match. You select the notes to add. |
 | `/ebb add @<deck> <topic>` | The same for a named deck. ebb creates the deck on first use. With more than one deck, the name is necessary. |
-| `/ebb pause [1h\|30m\|2d\|off]` | Stops the cards in the spinner for that time. The default is 1 hour. |
+| `/ebb pause [1h\|30m\|2d\|off]` | Hides the band for that time. The default is 1 hour. |
 | `/ebb stats` | Shows the number of notes, due cards and new cards. |
 
-In the study pane:
+In the band above the prompt:
 
-- Press `r` or Enter to show the answer.
+- Click a button, or press `ctrl+x tab` to move the keys to the band and then press its key.
+- Press `r` to show the answer, or `s` to skip the card. A skipped card comes back when no other card is left.
 - Press `1` (Again), `2` (Hard), `3` (Good) or `4` (Easy) to grade the card. Each button shows the next interval.
-- Press `q` to ask Claude a question about the card.
-- Press Escape to close the pane.
+- Press Escape to return to the prompt.
+- Click `🌊 ebb` under the prompt to hide or show the band. It stays as you left it in new sessions.
 
 In the pane of `/ebb add`:
 
@@ -94,14 +95,12 @@ In the pane of `/ebb add`:
 
 - A new note gets a recognition card (for example Spanish → Russian).
 - In a language deck, when the recognition card reaches a stability of 21 days, ebb adds a production card (Russian → Spanish). A deck of facts asks in one direction only.
-- The study session shows due cards first. Then it shows new cards, up to 10 each day for each deck. Then it shows learning cards that come due in the next 20 minutes.
+- The band shows due cards first. Then it shows new cards in deck order, up to 10 each day for each deck. Then it shows learning cards that come due in the next 20 minutes.
 - Learning steps are 1 minute and 10 minutes. The relearning step is 10 minutes.
-- The spinner shows cards that are in learning or due within a day. If there are none, it shows one of the next 5 new cards in deck order.
-- Each card gives way after 3 showings in the spinner since its last review. Thus the spinner moves through the deck on its own, about one new word for each 3 turns, also when you never open `/ebb`. A review starts the count again. To change the number, set `passiveShows` on the deck in `data.json`.
-- When every card has had its showings, the spinner shows any card you have met.
-- A card in the spinner does not change its schedule. The counts of showings are in `~/.claude/ebb/passive.json`.
+- When nothing is scheduled, the band runs ahead: new cards past the daily limit, then the card that comes due soonest. So it always has a card.
+- Only a grade changes a schedule. Showing or skipping a card does not.
+- At the end of each turn, a card whose answer is hidden makes way for a card that came due.
 - When a deck file has the same front twice, the note gets the meanings of both: `mejor` is `лучший; лучше`.
-- The spinner never shows a card with more than 40 characters on its front.
 
 The terms are defined in [CONTEXT.md](CONTEXT.md).
 
@@ -110,8 +109,7 @@ The terms are defined in [CONTEXT.md](CONTEXT.md).
 All data is in `~/.claude/ebb/`:
 
 - `data.json` holds the decks, notes and card schedules.
-- `passive.json` holds how many times the spinner showed each card since its last review.
-- `log/<YYYY-MM>/<session>.json` holds the reviews and the spinner exposures of one session.
+- `log/<YYYY-MM>/<session>.json` holds the reviews of one session.
 
 Each session writes only its own log file. A change to `data.json` takes a lock (`~/.claude/ebb/lock`) and reads the file again before it writes. Thus two open sessions do not lose each other's grades. A lock that is older than 10 seconds is removed.
 
