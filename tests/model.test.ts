@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { flagMismatches, parseNotes } from '../hooks/generate'
-import { interleave, parseTips, parseWordList } from '../hooks/importer'
+import { interleave, parseList } from '../hooks/decks'
 import { DAY, PASSIVE_SHOWS, addNotes, emptyData, ensureDeck, grade, newLeftToday, nextStudyCard, parseDuration, passiveKey, pickSpinnerCard, upgrade, type Data, type Passive } from '../hooks/model'
 
 const seeded = (): Data => {
@@ -78,14 +78,10 @@ test('a deck without production never unlocks it', async () => {
   expect(grade(data, id, 3, 60 * DAY).unlocked).toBeUndefined()
 })
 
-test('word lists and tips parse into notes', async () => {
-  expect(parseWordList('# comment\nel agua|вода\n\nbueno/a|хороший (buen перед м.р.)', 'noun')).toEqual([
+test('deck lists parse into notes', async () => {
+  expect(parseList('# comment\nel agua|вода\n\nTomar el pelo|подшучивать|букв. «взять за волосы»', 'noun')).toEqual([
     { front: 'el agua', back: 'вода', tags: ['noun'] },
-    { front: 'bueno/a', back: 'хороший (buen перед м.р.)', tags: ['noun'] },
-  ])
-  expect(parseTips(['💬 ¿Qué tal? — Как дела?', '🧠 Tomar el pelo — букв. «взять за волосы» → подшучивать'])).toEqual([
-    { front: '¿Qué tal?', back: 'Как дела?', tags: ['phrase'] },
-    { front: 'Tomar el pelo', back: 'подшучивать', hint: 'букв. «взять за волосы»', tags: ['idiom'] },
+    { front: 'Tomar el pelo', back: 'подшучивать', hint: 'букв. «взять за волосы»', tags: ['noun'] },
   ])
   expect(interleave([[1, 2, 3], [10], [20, 21]])).toEqual([1, 10, 20, 2, 21, 3])
 })

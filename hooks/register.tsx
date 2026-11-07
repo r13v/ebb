@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { View } from '../types'
+import type { NewDeck, View } from '../types'
 import { formatDelay, scheduler, type Rating } from './fsrs'
-import { backTranslationPrompt, flagMismatches, generationPrompt, parseNotes, questionPrompt } from './generate'
-import { SPANISH_FILES, interleave, parseTips, parseWordList } from './importer'
+import { BUNDLED } from '../decks'
+import { notesOf, type BundledDeck } from './decks'
+import { backTranslationPrompt, deckPrompt, flagMismatches, generationPrompt, parseDeckReply, parseNotes, questionPrompt } from './generate'
 import {
   addNotes,
   counts,
@@ -23,6 +24,7 @@ import {
   type Passive,
   type Face,
   type MonthLog,
+  type Deck,
   type NoteInput,
 } from './model'
 
@@ -147,27 +149,54 @@ const appendLog = async ($: $, entry: Partial<MonthLog>) => {
   await logWrite
 }
 
-// ---------- import ----------
+// ---------- bundled decks ----------
 
-const importSpanish = async ($: $) => {
-  const src = `${await homeDir($)}/.claude/spanish`
-  const lists: NoteInput[][] = []
-  for (const [file, tag] of SPANISH_FILES) {
-    const path = `${src}/${file}`
-    if (await $.fs.exists(path)) lists.push(parseWordList(await $.fs.read(path), tag))
+const deckOf = (m: BundledDeck): Partial<Deck> & { id: string; name: string } => ({
+  id: m.id,
+  name: m.name,
+  learn: m.learn,
+  native: m.native,
+  guidance: m.guidance,
+  isBundled: true,
+  kinds: m.learn ? ['recognition', 'production'] : ['recognition'],
+})
+
+/**
+ * Adds to each bundled deck the person uses the notes a newer version of ebb brings.
+ * A word that is in two lists gets the meanings of both. The file is written only on a change.
+ */
+const syncBundled = async ($: $) => {
+  const data = await load($)
+  const used = BUNDLED.filter(b => data.decks[b.id]?.isBundled)
+  if (!used.length) return
+  const apply = (d: Data) => used.forEach(b => addNotes(d, b.id, notesOf(b), 'bundled', Date.now(), true))
+  const current = JSON.stringify(data)
+  const trial = JSON.parse(current) as Data
+  apply(trial)
+  if (JSON.stringify(trial) !== current) await mutate($, apply)
+}
+
+const deckCommand = async ($: $, id: string): Promise<string> => {
+  const data = await load($)
+  if (!id) {
+    const rows = BUNDLED.map(b => `${data.decks[b.id] ? '✓' : ' '} ${b.id} — ${b.name}. ${b.description}`)
+    const own = Object.values(data.decks)
+      .filter(d => !d.isBundled)
+      .map(d => `✓ ${d.id} — ${d.name}`)
+    return [...rows, ...own, '', 'Add one: /ebb deck <id>. Make your own: /ebb add <topic>.'].join('\n')
   }
-  const tipsPath = `${src}/tips.json`
-  const tips = (await $.fs.exists(tipsPath)) ? parseTips(JSON.parse(await $.fs.read(tipsPath))) : []
-  if (!lists.length && !tips.length) return 0
-  return mutate($, data => {
-    ensureDeck(data, { id: 'es', name: 'Castellano' })
-    return addNotes(data, 'es', [...interleave(lists), ...tips], 'spanish-import', Date.now(), true)
+  const chosen = BUNDLED.find(b => b.id === id)
+  if (!chosen) return `No deck "${id}". See /ebb deck.`
+  const added = await mutate($, d => {
+    ensureDeck(d, deckOf(chosen))
+    return addNotes(d, id, notesOf(chosen), 'bundled', Date.now(), true)
   })
+  return `Added ${chosen.name}: ${added} notes. Cards start showing in the spinner; review them with /ebb.`
 }
 
 // ---------- spinner and end of turn ----------
 
-type Reveal = { face: Face; due: number }
+type Reveal = { face: Face; due: number } | { hint: string }
 let current: Reveal | undefined
 let pending: Reveal | undefined
 const reveals = new Map<string, Reveal | null>()
@@ -175,12 +204,21 @@ const reveals = new Map<string, Reveal | null>()
 let isChosenForTurn = false
 let isTurnRunning = false
 let lastShownId: string | undefined
+const recentPrompts: string[] = []
 
 /** Chooses this turn's card, logs the exposure, and keeps its reveal for the turn line. */
 const showNextCard = async ($: $) => {
   try {
     const data = await load($)
     const now = Date.now()
+    if (!Object.keys(data.decks).length) {
+      // No deck yet: say once, on a turn line, how to get one.
+      if (!(await $.store.get('hinted'))) {
+        await $.store.set('hinted', true)
+        pending = { hint: 'ebb: /ebb deck to pick a deck' }
+      }
+      return
+    }
     const path = await passivePath($)
     const passive: Passive = (await $.fs.exists(path)) ? JSON.parse(await $.fs.read(path)) : {}
     const picked = pickSpinnerCard(data, passive, now, lastShownId, Math.random)
@@ -227,10 +265,10 @@ const gradeCurrent = async ($: $, rating: Rating) => {
     await appendLog($, { reviews: [graded.log] })
     const data = await load($)
     const next = nextStudyCard(data, Date.now(), cardId)
-    const note = graded.unlocked ? `Открыта обратная карточка: ${face(data, graded.unlocked)?.ask}` : undefined
+    const note = graded.unlocked ? `New reverse card: ${face(data, graded.unlocked)?.ask}` : undefined
     await update($, view, (): View => ({ mode: 'study', cardId: next?.id ?? null, isRevealed: false, shownAt: Date.now(), isAsking: false, note }))
   } catch (error) {
-    await update($, view, old => (old.mode === 'study' ? { ...old, note: `Оценка не сохранилась: ${String(error)}` } : old))
+    await update($, view, old => (old.mode === 'study' ? { ...old, note: `The grade was not saved: ${String(error)}` } : old))
   } finally {
     isGrading = false
   }
@@ -248,7 +286,7 @@ const askQuestion = async ($: $, question: string) => {
   const r = await $.model
     .complete({ model: MODEL, ...questionPrompt(deck, f.ask, f.answer, f.hint, question), maxTokens: 600, timeoutMs: 60_000 })
     .catch((error: unknown) => ({ isAnswered: false as const, reason: String(error) }))
-  const reply = r.isAnswered ? r.text.trim() : `Не получилось спросить: ${r.reason}`
+  const reply = r.isAnswered ? r.text.trim() : `Could not ask: ${r.reason}`
   await update($, view, old => (old.mode === 'study' && old.cardId === v.cardId ? { ...old, reply } : old))
 }
 
@@ -260,56 +298,96 @@ const startAsking = async ($: $) => {
 
 // ---------- adding notes ----------
 
-/** `@k8s what restarts pods` → deck `k8s`, created on first use; without `@`, the Spanish deck. */
+const setAdd = ($: $, change: Partial<Extract<View, { mode: 'add' }>>) => update($, view, old => (old.mode === 'add' ? { ...old, ...change } : old))
+
+/** The deck a new deck becomes: a language deck asks both ways, a deck of facts one way. */
+const deckFrom = (d: NewDeck): Partial<Deck> & { id: string; name: string } =>
+  d.learn ? { ...d, kinds: ['recognition', 'production'] } : { id: d.id, name: d.name, kinds: ['recognition'] }
+
+const generate = async ($: $, deck: Deck | NewDeck, topic: string) => {
+  const data = await load($)
+  await setAdd($, { status: 'Writing notes…' })
+  const existing = Object.values(data.notes).filter(n => n.deck === deck.id).map(n => n.front)
+  const asDeck = { ...deckFrom(deck), ...deck } as Deck
+  const made = await $.model.complete({ model: MODEL, ...generationPrompt(asDeck, topic, existing), maxTokens: 3000, timeoutMs: 120_000 })
+  if (!made.isAnswered) return setAdd($, { status: `The model did not answer: ${made.reason}` })
+  const parsed = parseNotes(made.text)
+  if ('error' in parsed) return setAdd($, { status: parsed.error })
+  const notes = parsed.notes.slice(0, 9)
+  const known = new Set(existing.map(f => f.toLowerCase()))
+  let candidates = notes.map(n => ({ ...n, isChecked: true }))
+  let status: string | undefined
+  if (deck.learn) {
+    await setAdd($, { status: 'Checking by back-translation…' })
+    const checked = await $.model.complete({ model: MODEL, ...backTranslationPrompt(asDeck, notes), maxTokens: 1500, timeoutMs: 60_000 })
+    candidates = flagMismatches(notes, checked.isAnswered ? checked.text : '')
+    if (!checked.isAnswered) {
+      // Without a back-translation nothing is checked: every note starts unticked, and the status says why.
+      candidates = candidates.map(c => ({ ...c, isChecked: false }))
+      status = 'The back-translation failed: check the notes yourself and tick the good ones'
+    }
+  }
+  candidates = candidates.map(c => (known.has(c.front.toLowerCase()) ? { ...c, isDuplicate: true, isChecked: false } : c))
+  await setAdd($, { candidates, status })
+}
+
+/**
+ * `/ebb add [@deck] <topic>`. An existing deck is used as it is. A new deck gets its languages
+ * from the request and the person's recent messages; when their own language is unclear, the
+ * pane asks for it once. The new deck is saved with its first notes, so a cancel leaves nothing.
+ */
 const startAdd = async ($: $, args: string) => {
   const named = /^@([\w-]+)\s+(.+)$/u.exec(args)
-  const deckId = named ? named[1]! : 'es'
   const topic = named ? named[2]! : args
-  if (!(await load($)).decks[deckId]) {
-    // A deck other than the Spanish one asks one way only: question → answer.
-    await mutate($, d => ensureDeck(d, deckId === 'es' ? { id: 'es', name: 'Castellano' } : { id: deckId, name: deckId, kinds: ['recognition'] }))
-  }
   const data = await load($)
-  const deck = data.decks[deckId]!
-  await update($, view, (): View => ({ mode: 'add', deck: deck.id, topic, candidates: [], status: 'Генерирую…' }))
-  await $.ui.open({ id: PANE, title: 'ebb · новые записи', focus: true, closeOnEscape: true })
+  const decks = Object.values(data.decks)
+  const existing = named ? data.decks[named[1]!] : decks.length === 1 ? decks[0] : undefined
+  if (!named && decks.length > 1) return `Name the deck: /ebb add @<deck> ${topic}. Decks: ${decks.map(d => d.id).join(', ')}.`
+  await update($, view, (): View => ({ mode: 'add', deck: existing?.id ?? named?.[1] ?? '', topic, candidates: [], status: 'Reading the request…' }))
+  await $.ui.open({ id: PANE, title: 'ebb · new notes', focus: true, closeOnEscape: true })
   void (async () => {
-    const setStatus = (status: string | undefined) => update($, view, old => (old.mode === 'add' ? { ...old, status } : old))
-    const existing = Object.values(data.notes).filter(n => n.deck === deck.id).map(n => n.front)
-    const made = await $.model.complete({ model: MODEL, ...generationPrompt(deck, topic, existing), maxTokens: 3000, timeoutMs: 120_000 })
-    if (!made.isAnswered) return setStatus(`Модель не ответила: ${made.reason}`)
-    const parsed = parseNotes(made.text)
-    if ('error' in parsed) return setStatus(parsed.error)
-    const notes = parsed.notes.slice(0, 9)
-    await setStatus('Проверяю обратным переводом…')
-    const checked = await $.model.complete({ model: MODEL, ...backTranslationPrompt(deck, notes), maxTokens: 1500, timeoutMs: 60_000 })
-    const known = new Set(existing.map(f => f.toLowerCase()))
-    // Without a back-translation nothing is checked: every note starts unticked, and the status says why.
-    const unchecked = !checked.isAnswered
-    const candidates = flagMismatches(notes, checked.isAnswered ? checked.text : '').map(c =>
-      known.has(c.front.toLowerCase()) ? { ...c, isDuplicate: true, isChecked: false } : unchecked ? { ...c, isChecked: false } : c,
-    )
-    const status = unchecked ? 'Обратный перевод не удался: проверьте записи сами и отметьте нужные' : undefined
-    await update($, view, old => (old.mode === 'add' ? { ...old, candidates, status } : old))
-  })().catch(error => update($, view, old => (old.mode === 'add' ? { ...old, status: `Ошибка: ${String(error)}` } : old)))
-  return `Генерирую записи про «${topic}» — список откроется в панели ebb.`
+    if (existing) return generate($, existing, topic)
+    const r = await $.model.complete({ model: MODEL, ...deckPrompt(args, recentPrompts), maxTokens: 300, timeoutMs: 60_000 })
+    const reply = r.isAnswered ? parseDeckReply(r.text) : undefined
+    const newDeck: NewDeck = {
+      id: named?.[1] ?? reply?.id ?? 'notes',
+      name: reply?.name ?? named?.[1] ?? 'Notes',
+      learn: reply?.learn ?? undefined,
+      native: reply?.native ?? undefined,
+    }
+    await setAdd($, { deck: newDeck.id, newDeck, status: undefined })
+    if (newDeck.learn && !newDeck.native) return void (await $.ui.focus({ requestId: PANE, key: 'native' }))
+    await generate($, newDeck, topic)
+  })().catch(error => setAdd($, { status: `Error: ${String(error)}` }))
+  return `Writing notes for "${topic}". They open in the ebb pane.`
+}
+
+const setNative = async ($: $, native: string) => {
+  const v = await read($, view)
+  if (v.mode !== 'add' || !v.newDeck || !native.trim()) return
+  const newDeck = { ...v.newDeck, native: native.trim() }
+  await setAdd($, { newDeck })
+  await generate($, newDeck, v.topic)
 }
 
 const commitAdd = async ($: $) => {
   const v = await read($, view)
   if (v.mode !== 'add') return
   const chosen = v.candidates.filter(c => c.isChecked && !c.isDuplicate)
-  const added = await mutate($, data => addNotes(data, v.deck, chosen, `ebb add: ${v.topic}`, Date.now()))
-  await openStudy($, `Добавлено записей: ${added}`)
+  const added = await mutate($, data => {
+    if (v.newDeck) ensureDeck(data, deckFrom(v.newDeck))
+    return addNotes(data, v.deck, chosen, `ebb add: ${v.topic}`, Date.now())
+  })
+  await openStudy($, `Notes added: ${added}`)
 }
 
 // ---------- commands ----------
 
-const HELP = `/ebb — сессия повторения
-/ebb add [@колода] <тема или список слов> — сгенерировать записи (новая @колода создаётся сама)
-/ebb pause [1h|30m|2d|off] — не показывать карточки в спиннере
-/ebb stats — сколько к повторению и новых
-/ebb import — импорт из ~/.claude/spanish`
+const HELP = `/ebb — review cards
+/ebb deck [id] — list the bundled decks, or add one
+/ebb add [@deck] <topic or word list> — write new notes with Claude; a new @deck is made on first use
+/ebb pause [1h|30m|2d|off] — no cards in the spinner for a while
+/ebb stats — notes, due cards and new cards`
 
 const runCommand = async ($: $, args: string): Promise<string | undefined> => {
   const [sub = '', ...rest] = args.trim().split(/\s+/)
@@ -318,29 +396,26 @@ const runCommand = async ($: $, args: string): Promise<string | undefined> => {
     case '':
       await openStudy($)
       return undefined
+    case 'deck':
+      return deckCommand($, tail)
     case 'add':
-      return tail ? startAdd($, tail) : 'Напишите тему: /ebb add еда в баре'
+      return tail ? startAdd($, tail) : 'Name a topic: /ebb add ordering at a bar'
     case 'pause': {
       if (tail === 'off') {
         await mutate($, data => void delete data.meta.pausedUntil)
-        return 'Карточки снова в спиннере.'
+        return 'Cards are back in the spinner.'
       }
       const ms = tail ? parseDuration(tail) : 3_600_000
-      if (!ms) return 'Не понял длительность: /ebb pause 1h, 30m, 2d или off'
+      if (!ms) return 'Use /ebb pause 1h, 30m, 2d or off'
       const until = Date.now() + ms
       await mutate($, data => void (data.meta.pausedUntil = until))
-      return `Пауза до ${new Date(until).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.`
+      return `Paused until ${new Date(until).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}.`
     }
     case 'stats': {
       const data = await load($)
       const c = counts(data, Date.now())
-      const total = Object.keys(data.notes).length
-      const paused = (data.meta.pausedUntil ?? 0) > Date.now() ? ' · пауза' : ''
-      return `Записей: ${total} · к повторению: ${c.due} · новых: ${c.new}${paused}`
-    }
-    case 'import': {
-      const added = await importSpanish($)
-      return `Импортировано новых записей: ${added}.`
+      const paused = (data.meta.pausedUntil ?? 0) > Date.now() ? ' · paused' : ''
+      return `Notes: ${Object.keys(data.notes).length} · due: ${c.due} · new: ${c.new}${paused}`
     }
     default:
       return HELP
@@ -352,8 +427,8 @@ const runCommand = async ($: $, args: string): Promise<string | undefined> => {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    await $.command.register({ name: 'ebb', description: 'Интервальное повторение: сессия, add, pause, stats', argumentHint: '[add <тема> | pause 1h | stats]' })
-    if (!(await $.fs.exists(await dataPath($)))) await importSpanish($).catch(error => $.ui.log(`ebb: импорт не удался: ${String(error)}`, { to: 'debug' }))
+    await $.command.register({ name: 'ebb', description: 'Spaced repetition: review, deck, add, pause, stats', argumentHint: '[deck | add <topic> | pause 1h | stats]' })
+    await syncBundled($).catch(error => $.ui.log(`ebb: deck update failed: ${String(error)}`, { to: 'debug' }))
     return started
   })
 
@@ -366,6 +441,8 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     // A slash command starts no model turn of its own; a prompt queued during a turn keeps that turn's card.
     if (e.command || e.text.trimStart().startsWith('/') || isTurnRunning) return next(e)
+    recentPrompts.push(e.text.slice(0, 300))
+    if (recentPrompts.length > 3) recentPrompts.shift()
     await showNextCard($)
     isChosenForTurn = true
     return next(e)
@@ -403,12 +480,14 @@ export const register: Register = on => {
     const reveal = reveals.get(e.requestId)
     if (!reveal) return next(e)
     const { Text } = $.ui.resolve(e)
+    const line = `✻ ${e.props.word} for ${durationText(e.props.durationMs)} · `
+    if ('hint' in reveal) return <Text dimColor>{line}{reveal.hint}</Text>
     const { ask, answer } = reveal.face
-    const due = reveal.due ? ` · ${reveal.due} к повторению · /ebb` : ''
     return (
       <Text dimColor>
-        ✻ {e.props.word} for {durationText(e.props.durationMs)} · <Text dimColor={false}>{ask} — {answer}</Text>
-        {due}
+        {line}
+        <Text dimColor={false}>{ask} — {answer}</Text>
+        {reveal.due ? ` · ${reveal.due} due · /ebb` : ''}
       </Text>
     )
   })
@@ -423,14 +502,18 @@ export const register: Register = on => {
           old.mode === 'add' ? { ...old, candidates: old.candidates.map((c, j) => (j === i && !c.isDuplicate ? { ...c, isChecked: !c.isChecked } : c)) } : old,
         )
       const chosen = v.candidates.filter(c => c.isChecked && !c.isDuplicate).length
+      const newDeck = v.newDeck
       return (
         <Box flexDirection="column" gap={1}>
-          <Text bold>Новые записи: {v.topic}</Text>
+          <Text bold>New notes: {v.topic}</Text>
           {v.status && <Text dimColor>{v.status}</Text>}
+          {newDeck?.learn && !newDeck.native && (
+            <Input key="native" label={`Translate ${newDeck.learn} into which language?`} placeholder="for example: English" autoFocus onSubmit={value => void setNative($, value)} />
+          )}
           <Box flexDirection="column">
             {v.candidates.map((c, i) => (
               <Button key={`c${i}`} hotkey={String(i + 1)} onPress={() => toggle(i)}>
-                {c.isDuplicate ? '[дубль]' : c.isChecked ? '[x]' : '[ ]'} {c.front} — {c.back}
+                {c.isDuplicate ? '[have]' : c.isChecked ? '[x]' : '[ ]'} {c.front} — {c.back}
                 {c.hint ? ` (${c.hint})` : ''}
                 {c.flag ? ` ⚠ ${c.flag}` : ''}
               </Button>
@@ -439,10 +522,10 @@ export const register: Register = on => {
           {v.candidates.length > 0 && (
             <Box gap={2}>
               <Button key="add" hotkey="a" variant="primary" onPress={() => void commitAdd($)}>
-                Добавить отмеченные ({chosen})
+                Add ticked ({chosen})
               </Button>
               <Button key="cancel" hotkey="x" onPress={() => void $.ui.close({ id: PANE })}>
-                Отмена
+                Cancel
               </Button>
             </Box>
           )}
@@ -454,16 +537,24 @@ export const register: Register = on => {
     try {
       data = await load($)
     } catch (error) {
-      return <Text color="red">ebb: не удалось прочитать данные: {String(error)}</Text>
+      return <Text color="red">ebb: cannot read the data: {String(error)}</Text>
     }
     const now = Date.now()
     const c = counts(data, now)
     const header = (
       <Text dimColor>
-        к повторению: {c.due} · новых сегодня: {Math.min(c.new, Object.values(data.decks).reduce((n, d) => n + newLeftToday(data, d, now), 0))}
-        {(data.meta.pausedUntil ?? 0) > now ? ' · спиннер на паузе' : ''}
+        due: {c.due} · new today: {Math.min(c.new, Object.values(data.decks).reduce((n, d) => n + newLeftToday(data, d, now), 0))}
+        {(data.meta.pausedUntil ?? 0) > now ? ' · spinner paused' : ''}
       </Text>
     )
+    if (!Object.keys(data.decks).length) {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold>No deck yet.</Text>
+          <Text dimColor>Pick a bundled one with /ebb deck, or make your own with /ebb add &lt;topic&gt;.</Text>
+        </Box>
+      )
+    }
     const card = v.cardId ? data.cards[v.cardId] : undefined
     const f = card && face(data, card)
     if (!f) {
@@ -474,17 +565,17 @@ export const register: Register = on => {
         <Box flexDirection="column" gap={1}>
           {header}
           {v.note && <Text color="green">{v.note}</Text>}
-          <Text bold>На сейчас всё.</Text>
-          {soon && <Text dimColor>Следующее повторение через {formatDelay(Math.max(0, soon.due - now))}.</Text>}
-          <Text dimColor>Новые записи: /ebb add &lt;тема&gt;</Text>
+          <Text bold>All done for now.</Text>
+          {soon && <Text dimColor>Next review in {formatDelay(Math.max(0, soon.due - now))}.</Text>}
+          <Text dimColor>New notes: /ebb add &lt;topic&gt;</Text>
         </Box>
       )
     }
 
+    const deck = data.decks[f.note.deck]
     const intervals = scheduler().preview(f.card, now)
-    const labels = ['Снова', 'Трудно', 'Хорошо', 'Легко']
-    const isSpanish = f.note.deck === 'es'
-    const kind = f.card.kind === 'production' ? (isSpanish ? 'вспомните по-испански, с артиклем' : 'вспомните обратную сторону') : isSpanish ? 'что это значит?' : 'вспомните ответ'
+    const labels = ['Again', 'Hard', 'Good', 'Easy']
+    const kind = f.card.kind === 'production' ? `say it in ${deck?.learn ?? 'the deck language'}` : deck?.learn ? 'what does it mean?' : 'recall the answer'
     return (
       <Box flexDirection="column" gap={1}>
         {header}
@@ -506,19 +597,19 @@ export const register: Register = on => {
         ) : (
           <Box gap={2}>
             <Button key="reveal" hotkey="r" variant="primary" autoFocus onPress={() => void update($, view, old => (old.mode === 'study' ? { ...old, isRevealed: true } : old))}>
-              Показать ответ
+              Show answer
             </Button>
             <Button key="ask" hotkey="q" onPress={() => void startAsking($)}>
-              Спросить
+              Ask
             </Button>
           </Box>
         )}
         {v.isRevealed && !v.isAsking && (
           <Button key="ask-after" hotkey="q" onPress={() => void startAsking($)}>
-            Спросить про карточку
+            Ask about this card
           </Button>
         )}
-        {v.isAsking && <Input key="question" placeholder="Вопрос про эту карточку…" autoFocus onSubmit={value => void askQuestion($, value)} />}
+        {v.isAsking && <Input key="question" placeholder="A question about this card…" autoFocus onSubmit={value => void askQuestion($, value)} />}
         {v.reply && <Text>{v.reply}</Text>}
       </Box>
     )

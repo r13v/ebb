@@ -17,6 +17,13 @@ export type Deck = {
   productionUnlockDays: number
   /** Spinner showings of a card before it gives way to the next one. */
   passiveShows?: number
+  /** The language the deck teaches, and the language of its answers; absent for a deck of facts. */
+  learn?: string
+  native?: string
+  /** Extra instructions for `/ebb add` notes in this deck. */
+  guidance?: string
+  /** True for a deck that comes with ebb: each session start adds the notes a newer version brings. */
+  isBundled?: boolean
 }
 
 export type Note = {

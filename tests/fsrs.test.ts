@@ -59,7 +59,7 @@ test('fuzz keeps a review interval near the unfuzzed one', async () => {
 })
 
 test('delays read short', async () => {
-  expect(formatDelay(60_000)).toBe('1м')
-  expect(formatDelay(6 * 3_600_000)).toBe('6ч')
-  expect(formatDelay(3 * DAY)).toBe('3д')
+  expect(formatDelay(60_000)).toBe('1m')
+  expect(formatDelay(6 * 3_600_000)).toBe('6h')
+  expect(formatDelay(3 * DAY)).toBe('3d')
 })

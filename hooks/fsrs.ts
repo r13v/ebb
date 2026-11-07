@@ -165,14 +165,14 @@ export function scheduler(options: Options = {}) {
   return { review, preview }
 }
 
-/** `65_000` → `1м`, `3 * DAY` → `3д`. */
+/** `65_000` → `1m`, `3 * DAY` → `3d`. */
 export const formatDelay = (ms: number): string => {
   const min = Math.round(ms / MINUTE)
-  if (min < 60) return `${Math.max(1, min)}м`
+  if (min < 60) return `${Math.max(1, min)}m`
   const hours = Math.round(ms / 3_600_000)
-  if (hours < 24) return `${hours}ч`
+  if (hours < 24) return `${hours}h`
   const days = Math.round(ms / DAY)
-  if (days < 31) return `${days}д`
-  if (days < 365) return `${Math.round(days / 30)}мес`
-  return `${(days / 365).toFixed(1).replace('.0', '')}г`
+  if (days < 31) return `${days}d`
+  if (days < 365) return `${Math.round(days / 30)}mo`
+  return `${(days / 365).toFixed(1).replace('.0', '')}y`
 }

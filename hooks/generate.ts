@@ -4,14 +4,16 @@
 import type { Candidate } from '../types'
 import type { Deck, NoteInput } from './model'
 
-const LANGUAGE_DECK = `The deck teaches Castilian Spanish (Spain, not Latin America) to a Russian speaker.
-- front: the Spanish word or phrase. Nouns carry their article (el/la/los/las). Adjectives show both genders as "bueno/a" when they change.
-- back: a short Russian translation; for several meanings, separate them with "; ".
-- hint: optional, one short Russian note on a trap: gender exceptions, ser/estar, a false friend, irregular forms. Omit when there is none.
-- Use Spain's usage: ordenador, coche, móvil, zumo, patata, vale, vosotros.`
+const describeDeck = (deck: Deck) =>
+  deck.learn && deck.native
+    ? `The deck teaches ${deck.learn} to a ${deck.native} speaker.
+- front: the ${deck.learn} word or phrase.
+- back: a short ${deck.native} translation.
+- hint: optional, one short note in ${deck.native} on a trap. Omit it when there is none.${deck.guidance ? `\n${deck.guidance}` : ''}`
+    : `Deck: ${deck.name}. front: a short question or cue; back: the short answer.${deck.guidance ? `\n${deck.guidance}` : ''}`
 
 export const generationPrompt = (deck: Deck, topic: string, existing: string[]) => ({
-  system: `You write spaced-repetition notes. ${deck.id === 'es' ? LANGUAGE_DECK : `Deck: ${deck.name}. front: a short question or cue; back: the short answer.`}
+  system: `You write spaced-repetition notes. ${describeDeck(deck)}
 One fact per note. Prefer frequent, useful items. Reply with JSON only, no prose and no code fence:
 {"notes":[{"front":"...","back":"...","hint":"...","tags":["..."]}]}`,
   prompt: `Topic or list: ${topic}
@@ -22,15 +24,15 @@ Write up to 9 notes. Skip these, the deck has them: ${existing.slice(0, 300).joi
 export const parseNotes = (text: string): { notes: NoteInput[] } | { error: string } => {
   const start = text.indexOf('{')
   const end = text.lastIndexOf('}')
-  if (start < 0 || end <= start) return { error: 'в ответе модели нет JSON' }
+  if (start < 0 || end <= start) return { error: 'the reply has no JSON' }
   let value: unknown
   try {
     value = JSON.parse(text.slice(start, end + 1))
   } catch {
-    return { error: 'модель вернула битый JSON' }
+    return { error: 'the reply has broken JSON' }
   }
   const list = (value as { notes?: unknown }).notes
-  if (!Array.isArray(list)) return { error: 'в JSON нет списка notes' }
+  if (!Array.isArray(list)) return { error: 'the JSON has no notes list' }
   const notes: NoteInput[] = []
   for (const item of list) {
     if (typeof item !== 'object' || item === null) continue
@@ -43,12 +45,12 @@ export const parseNotes = (text: string): { notes: NoteInput[] } | { error: stri
       tags: Array.isArray(tags) ? tags.filter((t): t is string => typeof t === 'string') : [],
     })
   }
-  return notes.length ? { notes } : { error: 'модель не вернула ни одной записи' }
+  return notes.length ? { notes } : { error: 'the reply has no notes' }
 }
 
-/** Back-translation: the model sees only the backs and writes the fronts. */
+/** Back-translation of a language deck: the model sees only the backs and writes the fronts. */
 export const backTranslationPrompt = (deck: Deck, notes: NoteInput[]) => ({
-  system: `Translate each item back into the deck's target language (${deck.id === 'es' ? 'Castilian Spanish; nouns with their article' : deck.name}). Reply with JSON only: {"fronts":["..."]}, same order and length.`,
+  system: `Translate each item into ${deck.learn}.${deck.guidance ? ` ${deck.guidance}` : ''} Reply with JSON only: {"fronts":["..."]}, same order and length.`,
   prompt: JSON.stringify(notes.map(n => n.back)),
 })
 
@@ -78,11 +80,33 @@ export const flagMismatches = (notes: NoteInput[], reply: string): Candidate[] =
     const b = normalize(back)
     const words = new Set(a.split(/[ /]/))
     const isClose = a === b || a.includes(b) || b.includes(a) || b.split(/[ /]/).some(w => w.length > 3 && words.has(w))
-    return isClose ? { ...note, isChecked: true } : { ...note, isChecked: false, flag: `обратный перевод: ${back}` }
+    return isClose ? { ...note, isChecked: true } : { ...note, isChecked: false, flag: `back-translation: ${back}` }
   })
 }
 
 export const questionPrompt = (deck: Deck, ask: string, answer: string, hint: string | undefined, question: string) => ({
-  system: `You are a concise tutor inside a flashcard app. ${deck.id === 'es' ? 'The learner is a Russian speaker learning Castilian Spanish (Spain).' : `Deck: ${deck.name}.`} Answer in Russian, in at most 6 short lines, plain text without markdown.`,
+  system: `You are a concise tutor inside a flashcard app. ${deck.learn && deck.native ? `The learner is a ${deck.native} speaker learning ${deck.learn}. Answer in ${deck.native}.` : `Deck: ${deck.name}. Answer in the language of the question.`} Use at most 6 short lines, plain text without markdown.`,
   prompt: `Card: ${ask} — ${answer}${hint ? ` (${hint})` : ''}\nQuestion: ${question}`,
 })
+
+/** What a new deck needs, read from the request and the person's recent messages. */
+export type DeckReply = { id: string; name: string; learn: string | null; native: string | null }
+
+export const deckPrompt = (request: string, recent: string[]) => ({
+  system: `A person asks a flashcard app for notes. Decide the deck they need. Reply with JSON only:
+{"id":"short-lowercase-slug","name":"Short deck name","learn":"the language the person learns, or null when the notes are not about a language","native":"the language of the answers, or null"}
+The language of the answers is the language the person writes in, in the request or in their recent messages. When the request is about a language but you cannot tell the person's own language, "native" is null.`,
+  prompt: `Request: ${request}\nRecent messages: ${JSON.stringify(recent.slice(-3))}`,
+})
+
+export const parseDeckReply = (text: string): DeckReply | undefined => {
+  try {
+    const v = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)) as Record<string, unknown>
+    const id = typeof v.id === 'string' ? v.id.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') : ''
+    if (!id) return undefined
+    const text_ = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : null)
+    return { id, name: text_(v.name) ?? id, learn: text_(v.learn), native: text_(v.native) }
+  } catch {
+    return undefined
+  }
+}

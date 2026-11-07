@@ -3,10 +3,10 @@
 ebb is a Claude Code mod for spaced repetition. It teaches you words, phrases or any other facts while you do your normal work.
 
 - While Claude works, the spinner shows one card, for example `el corazón`.
-- When the turn ends, the turn line shows the answer: `✻ Baked for 12s · el corazón — сердце · 7 к повторению · /ebb`.
+- When the turn ends, the turn line shows the answer: `✻ Baked for 12s · el corazón — heart · 7 due · /ebb`.
 - You grade cards only when you open a study session with `/ebb`. ebb never interrupts you.
 
-The scheduler is FSRS-6, the algorithm that Anki uses. The first deck is Castilian Spanish for Russian speakers.
+The scheduler is FSRS-6, the algorithm that Anki uses.
 
 ## Install
 
@@ -17,18 +17,23 @@ claude plugin install ebb@ebb
 
 Then restart Claude Code.
 
-On the first start, ebb imports the word lists from `~/.claude/spanish` if that folder exists. Run `/ebb import` again after you change the lists.
+## Get cards
+
+ebb starts with no deck. You can take a deck that comes with ebb, or let Claude write one.
+
+- `/ebb deck` lists the bundled decks. `/ebb deck es-ru` adds one: about 2000 frequent words, phrases and idioms of Castilian Spanish with Russian translations.
+- `/ebb add <topic>` makes a deck on the first use. Write the request in your own language, for example `/ebb add испанские слова для бара` or `/ebb add Spanish words for a bar`. Claude reads the language you learn from the request and gives the answers in the language you write in. If it cannot tell your language, the pane asks once. A topic that is not about a language, such as `/ebb add @k8s pods`, makes a deck of questions and answers.
 
 ## Commands
 
 | Command | Result |
 |---|---|
 | `/ebb` | Opens the study pane. |
-| `/ebb add <topic>` | Claude writes up to 9 new notes on the topic. A second model call translates each note back and flags the notes that do not match. You select the notes to add. |
-| `/ebb add @<deck> <topic>` | The same for another deck, for example `@k8s`. ebb creates the deck on first use. Such a deck asks in one direction only: question → answer. |
+| `/ebb deck [id]` | Lists the bundled decks, or adds the deck with that id. |
+| `/ebb add <topic>` | Claude writes up to 9 new notes on the topic. In a language deck, a second model call translates each note back and flags the notes that do not match. You select the notes to add. |
+| `/ebb add @<deck> <topic>` | The same for a named deck. ebb creates the deck on first use. With more than one deck, the name is necessary. |
 | `/ebb pause [1h\|30m\|2d\|off]` | Stops the cards in the spinner for that time. The default is 1 hour. |
 | `/ebb stats` | Shows the number of notes, due cards and new cards. |
-| `/ebb import` | Imports `~/.claude/spanish` again. Notes that exist already are skipped. |
 
 In the study pane:
 
@@ -39,21 +44,21 @@ In the study pane:
 
 In the pane of `/ebb add`:
 
-- Press `1` to `9` to tick or untick a note. A note marked `[дубль]` is in the deck already and cannot be ticked.
+- Press `1` to `9` to tick or untick a note. A note marked `[have]` is in the deck already and cannot be ticked.
 - Press `a` to add the ticked notes, or `x` to cancel.
 - If the back-translation fails, no note is ticked and the pane says so. Check the notes yourself.
 
 ## How cards are scheduled
 
-- A new note gets a recognition card (Spanish → Russian).
-- When the recognition card reaches a stability of 21 days, ebb adds a production card (Russian → Spanish, with the article).
+- A new note gets a recognition card (for example Spanish → Russian).
+- In a language deck, when the recognition card reaches a stability of 21 days, ebb adds a production card (Russian → Spanish). A deck of facts asks in one direction only.
 - The study session shows due cards first. Then it shows new cards, up to 10 each day for each deck. Then it shows learning cards that come due in the next 20 minutes.
 - Learning steps are 1 minute and 10 minutes. The relearning step is 10 minutes.
 - The spinner shows cards that are in learning or due within a day. If there are none, it shows one of the next 5 new cards in deck order.
 - Each card gives way after 3 showings in the spinner since its last review. Thus the spinner moves through the deck on its own, about one new word for each 3 turns, also when you never open `/ebb`. A review starts the count again. To change the number, set `passiveShows` on the deck in `data.json`.
 - When every card has had its showings, the spinner shows any card you have met.
 - A card in the spinner does not change its schedule. The counts of showings are in `~/.claude/ebb/passive.json`.
-- The import from `~/.claude/spanish` merges a word that is in two lists: `mejor` gets `лучший; лучше`.
+- A bundled deck gets the new notes of a newer ebb version at the next start. A word that is in two lists of the deck has the meanings of both: `mejor` is `лучший; лучше`.
 - The spinner never shows a card with more than 40 characters on its front.
 
 The terms are defined in [CONTEXT.md](CONTEXT.md).
