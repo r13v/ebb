@@ -19,6 +19,15 @@ claude plugin install ebb@ebb
 
 Then restart Claude Code.
 
+To update, open `/plugin` in Claude Code, or run:
+
+```sh
+claude plugin marketplace update ebb
+claude plugin update ebb@ebb
+```
+
+Every change of the plugin on `main` gets a new version and a `v*` tag (`.github/workflows/release.yml`), so these commands see it.
+
 ## Get cards
 
 ebb comes with no cards. Make a deck, or install one.
