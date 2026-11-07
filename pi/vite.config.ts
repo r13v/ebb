@@ -5,6 +5,8 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   root: import.meta.dirname,
+  // pi's own tsconfig, also for core/: the root one extends the engine's types, which only `mise run dev` writes.
+  tsconfig: 'tsconfig.json',
   build: {
     lib: { entry: 'index.ts', formats: ['es'], fileName: 'index' },
     outDir: 'dist',
