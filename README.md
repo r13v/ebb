@@ -2,6 +2,8 @@
 
 ebb is a Claude Code mod for spaced repetition. It teaches you words, phrases or any other facts while you do your normal work.
 
+Site and decks: <https://r13v.github.io/ebb/>
+
 - While Claude works, the spinner shows one card, for example `el corazón`.
 - When the turn ends, the turn line shows the answer: `✻ Baked for 12s · el corazón — heart · 7 due · /ebb`.
 - You grade cards only when you open a study session with `/ebb`. ebb never interrupts you.
@@ -25,10 +27,12 @@ ebb comes with no cards. Make a deck, or install one.
 - **Install one:** `/ebb install <file or URL>` adds a deck file. For example, about 2000 words, phrases and idioms of Castilian Spanish with Russian translations:
 
   ```text
-  /ebb install https://raw.githubusercontent.com/r13v/ebb/main/decks/es-ru.json
+  /ebb install https://r13v.github.io/ebb/decks/es-ru.json
   ```
 
   Install the same file again to get its new notes. Your cards keep their schedule.
+
+  Every deck in `decks/` of this repository is on the site, with a button that copies its install command. To share a deck, add its file to `decks/` in a pull request.
 
 ### Deck file
 
@@ -108,6 +112,12 @@ Load the mod from a local checkout. Claude Code reloads it when a turn ends afte
 
 ```sh
 claude --plugin-dir ~/Projects/ebb
+```
+
+Build the site into `_site/` (GitHub Actions publishes it on a push to `main`):
+
+```sh
+node site/build.mjs
 ```
 
 Run the checks:
