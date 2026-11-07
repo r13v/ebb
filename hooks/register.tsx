@@ -21,17 +21,21 @@ const MODEL = 'sonnet'
 // The pane of `/ebb add`; null while it shows nothing.
 const view = atom({ plugin: 'ebb', key: 'view' } as const, null as View | null, { shape: 'view-2' })
 
-// The card above the prompt, as the session chose it; a state value, so a change redraws the band.
+// The card above the prompt, as the session chose it; a state value, so a change redraws the band. The
+// band draws the session's own card, not this value: `$.state` is per conversation, and a `/clear`
+// starts a new one at its default with no `session.start`, while this module and its session go on.
 const band = atom({ plugin: 'ebb', key: 'band' } as const, { cardId: null, isRevealed: false, shownAt: 0 } as Band, {
   shape: 'band-1',
 })
 
-// Whether the person hid the band with the footer button; kept in `$.store` across sessions.
+// Whether the person hid the band with the footer button; kept in `$.store` across sessions. The state
+// value redraws the band; the module's copy decides, for the same reason as the card.
 const isHidden = atom({ plugin: 'ebb', key: 'hidden' } as const, false, { shape: 'hidden-1' })
 const HIDDEN_KEY = 'hidden'
+let hidden = false
 
 const toggleBand = async ($: $) => {
-  const hidden = !(await read($, isHidden))
+  hidden = !hidden
   await update($, isHidden, () => hidden)
   await $.store.set(HIDDEN_KEY, hidden)
 }
@@ -92,7 +96,8 @@ const GRADES = [
 /** The card in the band, or nothing while the cards are paused or none is chosen. */
 const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve']>) => {
   // Reading the state value subscribes the band to it, so a new card redraws it.
-  const v = await session.bandView(await hostOf($), await read($, band))
+  await read($, band)
+  const v = await session.bandView(await hostOf($))
   if (v.kind === 'error') return <Text color="red">ebb: cannot read the data: {v.error}</Text>
   if (v.kind === 'no-deck')
     return <Text dimColor>ebb: /ebb add &lt;topic&gt; or /ebb install &lt;file or URL&gt; to get cards</Text>
@@ -185,7 +190,7 @@ const commitAdd = async ($: $) => {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    const hidden = (await $.store.get(HIDDEN_KEY)) === true
+    hidden = (await $.store.get(HIDDEN_KEY)) === true
     await update($, isHidden, () => hidden)
     await showNextCard($)
     await $.command.register({
@@ -228,7 +233,8 @@ export const register: Register = on => {
 
   // The band is shared: what the plugins beneath draw (`next(e)`) stays, and the card goes under it.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey || (await read($, isHidden))) return next(e)
+    await read($, isHidden)
+    if (e.props.hasSurvey || hidden) return next(e)
 
     const rest = await next(e)
     const card = await cardTree($, $.ui.resolve(e))

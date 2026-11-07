@@ -273,8 +273,8 @@ export const createSession = () => {
     if (!band.isRevealed) await showNextCard(host, undefined, true)
   }
 
-  /** What the band draws now; `shown` is the band as the host keeps it. A reader on every render: it never throws. */
-  const bandView = async (host: Host, shown: Band = band): Promise<BandView> => {
+  /** What the band draws now. A reader on every render: it never throws. */
+  const bandView = async (host: Host): Promise<BandView> => {
     let data: Data
     try {
       data = await load(host)
@@ -283,11 +283,11 @@ export const createSession = () => {
     }
     if (!Object.keys(data.decks).length) return { kind: 'no-deck' }
 
-    const card = shown.cardId ? data.cards[shown.cardId] : undefined
+    const card = band.cardId ? data.cards[band.cardId] : undefined
     const f = card && face(data, card)
     if ((data.meta.pausedUntil ?? 0) > Date.now() || !f) return { kind: 'none' }
 
-    return { kind: 'card', face: f, isRevealed: shown.isRevealed }
+    return { kind: 'card', face: f, isRevealed: band.isRevealed }
   }
 
   // ---------- commands ----------

@@ -498,3 +498,44 @@ test('/ebb add @deck makes a deck of facts that asks one way', async ($, on) => 
   expect(data.decks.k8s.kinds).toEqual(['recognition'])
   expect((Object.values(data.notes) as { deck: string }[]).filter(n => n.deck === 'k8s')).toHaveLength(1)
 })
+
+test('after /clear the band still shows its card', async ($, on) => {
+  engine(on)
+  // A /clear starts a new conversation: its state values are unwritten, and no session.start fires.
+  let isCleared = false
+  on('state.get', (_, e, next) =>
+    isCleared && e.plugin === 'ebb' ? ({ value: { value: undefined, version: 0 } } as never) : next(e),
+  )
+  const fs = disk(on)
+  await withDeck($, fs)
+  const before = await $.ui.mount(BAND)
+  const card = await front(before)
+  await before.unmount()
+
+  isCleared = true
+
+  const after = await $.ui.mount(BAND)
+  expect(await front(after)).toBe(card)
+  await after.unmount()
+})
+
+test('after /clear a band the person hid stays hidden', async ($, on) => {
+  engine(on)
+  let isCleared = false
+  on('state.get', (_, e, next) =>
+    isCleared && e.plugin === 'ebb' ? ({ value: { value: undefined, version: 0 } } as never) : next(e),
+  )
+  on('ui.render', { component: 'SessionMode' }, () => ({ type: 'Text', props: {}, children: [] }) as never)
+  const fs = disk(on)
+  await withDeck($, fs)
+  const footer = await $.ui.mount({ ...BAND, component: 'SessionMode', requestId: 'footer', props: { modes: [] } })
+  await footer.press({ key: 'ebb-band' })
+  await footer.unmount()
+
+  isCleared = true
+
+  const after = await $.ui.mount(BAND)
+  expect(await shown(after)).toContain('engine')
+  expect(await front(after)).toBeUndefined()
+  await after.unmount()
+})
