@@ -278,6 +278,7 @@ const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve
     <Box gap={2} flexWrap="wrap">
       <Text>
         <Text bold>{f.ask}</Text> — {f.answer}
+        {f.hint && <Text dimColor> ({f.hint})</Text>}
       </Text>
       {intervals.map(({ rating, due }, i) => (
         <Button

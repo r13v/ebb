@@ -16,6 +16,7 @@ All data is in `~/.claude/ebb/`; `README.md` § Data lists the files.
 - Several Claude Code sessions run the mod at once. Each one writes `data.json` only through `mutate` in `hooks/register.tsx`: it takes the lock (`withLock`), reads the file again inside it, applies a pure change and replaces the file through a temporary file and `mv`. A write outside `mutate` loses another session's grades.
 - The lock is a directory, because `mkdir` is atomic. `withLock` owns the stale-lock rule.
 - Each session writes only its own log file, so logs need no lock.
+- `$.fs` reads and writes at most 4 MiB, so `data.json` holds about 10 000 notes. A write past that fails and leaves the file as it was.
 - `upgrade` in `hooks/model.ts` reads data that an earlier version wrote. A change of the stored form extends `upgrade` and adds a test that seeds the old form.
 
 ## Model calls
@@ -24,5 +25,5 @@ All data is in `~/.claude/ebb/`; `README.md` § Data lists the files.
 
 ## Release and site
 
-- `.github/workflows/release.yml` bumps the version in `.claude-plugin/plugin.json` and tags it on every push that changes the mod. Without a new version, `claude plugin update` does not see the change.
+- `.github/workflows/release.yml` bumps the version in `.claude-plugin/plugin.json` and tags it after `.github/workflows/check.yml` passes on a push to `main` that changed the mod. Without a new version, `claude plugin update` does not see the change. CI installs the Claude Code version that `check.yml` pins; update it there together with a change that needs a newer engine.
 - `.github/workflows/pages.yml` builds `site/build.mjs` into `_site/` when `decks/` or `site/` changes. A deck file in `decks/` is public: the site serves it for `/ebb install`.

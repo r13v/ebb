@@ -16,4 +16,4 @@
 
 ## Live check
 
-The stubbed engine does not lay out the band or move the keys the way a real session does. A change of what the person sees needs a check in `mise run dev`: see the card above the prompt, press ctrl+x tab and `r`, see the grades, press Escape, then send a prompt and see that the band stays and the prompt takes the keys.
+The stubbed engine does not lay out the band or move the keys the way a real session does. A change of what the person sees needs a check in a real session. Inside agterm, `mise run live` (`scripts/live-check.sh`) opens one and prints the band before and after Show; it never grades, because the session uses the real data. Elsewhere, check by hand in `mise run dev`: the card above the prompt, ctrl+x tab and `r`, the grades, Escape, then a prompt that the band does not take keys from.

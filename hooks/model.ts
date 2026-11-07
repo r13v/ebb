@@ -41,7 +41,7 @@ export type Data = {
   decks: Record<string, Deck>
   notes: Record<string, Note>
   cards: Record<string, Card>
-  /** newByDeck: how many new cards each deck introduced on `day` (a local date). */
+  /** newByDeck: how many new recognition cards each deck introduced on `day` (a local date). */
   meta: { pausedUntil?: number; newByDeck?: Record<string, { day: string; count: number }> }
 }
 
@@ -193,9 +193,11 @@ const byOrder = (data: Data) => (a: Card, b: Card) =>
 
 /**
  * The next card for the band, or none only when every card is skipped.
- * By schedule first: due cards, new ones within the daily limit, learning cards due soon.
- * Then ahead of schedule, so the band never runs dry: new cards past the limit, in deck order,
- * then the card that comes due soonest.
+ * By schedule first: due cards, new recognition cards within the daily limit, new production
+ * cards, learning cards due soon. Then ahead of schedule, so the band never runs dry: new cards
+ * past the limit, in deck order, then the card that comes due soonest.
+ * A production card is of a word the person knows already, so it takes none of the daily limit:
+ * otherwise a mature deck would fill the limit with them and stop new words.
  */
 export const nextCard = (data: Data, now: number, skip: ReadonlySet<string> = new Set()): Card | undefined => {
   const cards = Object.values(data.cards).filter(c => !skip.has(c.id) && data.notes[c.note])
@@ -203,8 +205,13 @@ export const nextCard = (data: Data, now: number, skip: ReadonlySet<string> = ne
   if (due[0]) return due[0]
 
   const fresh = cards.filter(isNew).sort(byOrder(data))
-  const freshToday = fresh.find(c => newLeftToday(data, data.decks[data.notes[c.note]!.deck]!, now) > 0)
+  const freshToday = fresh.find(
+    c => c.kind === 'recognition' && newLeftToday(data, data.decks[data.notes[c.note]!.deck]!, now) > 0,
+  )
   if (freshToday) return freshToday
+
+  const production = fresh.find(c => c.kind === 'production')
+  if (production) return production
 
   const learningSoon = cards.filter(c => isLearning(c) && c.due <= now + LEARN_AHEAD_MS).sort((a, b) => a.due - b.due)
   if (learningSoon[0]) return learningSoon[0]
@@ -237,7 +244,7 @@ export const grade = (
     lapses: before.lapses + (rating === 1 && before.state === 2 ? 1 : 0),
   }
   data.cards[cardId] = card
-  if (before.state === 0) {
+  if (before.state === 0 && before.kind === 'recognition') {
     const day = localDay(now)
     data.meta.newByDeck ??= {}
     const byDeck = data.meta.newByDeck

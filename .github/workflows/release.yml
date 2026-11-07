@@ -2,10 +2,12 @@ name: Release
 
 # Every change of the plugin on main gets a new version, so `claude plugin update`
 # and the /plugin menu see an update. The version lives in .claude-plugin/plugin.json.
+# It runs only after Check passed on that push, so a broken mod is never released.
 on:
-  push:
+  workflow_run:
+    workflows: [Check]
+    types: [completed]
     branches: [main]
-    paths: [hooks/**, types/**, .claude-plugin/**]
   workflow_dispatch:
 
 permissions:
@@ -17,7 +19,10 @@ concurrency:
 
 jobs:
   release:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,8 +31,15 @@ jobs:
         run: |
           git fetch --force --tags origin main
           # A queued run for an older commit must not release over a newer one.
-          if [ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]; then
-            echo "main moved past $GITHUB_SHA; skipping"
+          if [ "$(git rev-parse FETCH_HEAD)" != "$SHA" ]; then
+            echo "main moved past $SHA; skipping"
+            exit 0
+          fi
+          git checkout -q "$SHA"
+          # Only a change of the mod since the last release makes a new version.
+          last="$(git describe --tags --abbrev=0 --match 'v*')"
+          if git diff --quiet "$last" "$SHA" -- hooks types .claude-plugin; then
+            echo "No change of the mod since $last; skipping"
             exit 0
           fi
           manifest=.claude-plugin/plugin.json

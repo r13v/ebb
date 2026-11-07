@@ -23,6 +23,10 @@ auto = true
 description = "A Claude Code session with the mod of this checkout; it reloads the mod after a turn that changed it"
 run = "claude --plugin-dir {{config_root}}"
 
+[tasks.live]
+description = "Inside agterm: a real session with the mod, its band before and after Show"
+run = "scripts/live-check.sh"
+
 [tasks.test]
 description = "The mod tests in the engine's environment"
 run = "claude plugin test {{config_root}}"

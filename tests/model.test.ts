@@ -65,6 +65,25 @@ test('with no new card left, the band shows the card that comes due soonest', as
   expect(nextCard(data, now)!.id).toBe(soonest.id)
 })
 
+test('new production cards take none of the daily limit and wait for today’s new words', async () => {
+  const data = seeded()
+  data.decks.es!.newPerDay = 2
+  const now = Date.UTC(2026, 10, 7, 10)
+  const [first, second] = Object.values(data.cards)
+  // A production card of the first note, unlocked earlier, is new.
+  const productionId = `${first!.note}:p`
+  data.cards[productionId] = { ...first!, id: productionId, kind: 'production' }
+  expect(nextCard(data, now)!.id).toBe(first!.id)
+  grade(data, first!.id, 4, now)
+  expect(nextCard(data, now)!.id).toBe(second!.id)
+  grade(data, second!.id, 4, now)
+  expect(nextCard(data, now)!.id).toBe(productionId)
+  grade(data, productionId, 4, now)
+  expect(newLeftToday(data, data.decks.es!, now)).toBe(0)
+  data.decks.es!.newPerDay = 3
+  expect(newLeftToday(data, data.decks.es!, now)).toBe(1)
+})
+
 test('a stable recognition card unlocks its production card', async () => {
   const data = seeded()
   const id = Object.keys(data.cards)[0]!

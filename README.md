@@ -5,7 +5,7 @@ ebb is a Claude Code mod for spaced repetition. It teaches you words, phrases or
 Site and decks: <https://r13v.github.io/ebb/>
 
 - A band above the prompt shows one card: `el corazón  [ Show ]  [ Skip ]`.
-- Show the answer, then grade the card: `el corazón — heart  [ Again 1m ]  [ Hard 6m ]  [ Good 10m ]  [ Easy 2d ]`. The next card comes at once.
+- Show the answer, then grade the card: `el corazón — heart  [ Again 1m ]  [ Hard 6m ]  [ Good 10m ]  [ Easy 2d ]`. A hint of the note, if it has one, follows the answer. The next card comes at once.
 - You can do it while Claude works, or ignore the band. The `🌊 ebb` button under the prompt hides the band and shows it again. ebb never interrupts you.
 
 The scheduler is FSRS-6, the algorithm that Anki uses.
@@ -95,7 +95,7 @@ In the pane of `/ebb add`:
 
 - A new note gets a recognition card (for example Spanish → Russian).
 - In a language deck, when the recognition card reaches a stability of 21 days, ebb adds a production card (Russian → Spanish). A deck of facts asks in one direction only.
-- The band shows due cards first. Then it shows new cards in deck order, up to 10 each day for each deck. Then it shows learning cards that come due in the next 20 minutes.
+- The band shows due cards first. Then it shows new cards in deck order, up to 10 each day for each deck. Then new production cards: they are words you know already, so they do not count toward the 10. Then it shows learning cards that come due in the next 20 minutes.
 - Learning steps are 1 minute and 10 minutes. The relearning step is 10 minutes.
 - When nothing is scheduled, the band runs ahead: new cards past the daily limit, then the card that comes due soonest. So it always has a card.
 - Only a grade changes a schedule. Showing or skipping a card does not.
@@ -121,6 +121,7 @@ The tools and tasks are in `mise.toml`. Install [mise](https://mise.jdx.dev), th
 mise install      # Node.js, hk, the npm tools and the Git hook
 mise run dev      # a Claude Code session with the mod of this checkout
 mise run verify   # Biome, Knip, TypeScript, validation and the tests
+mise run live     # inside agterm: a real session with the mod, its band before and after Show
 ```
 
 `mise run dev` loads the mod from the checkout; Claude Code reloads it when a turn ends after a change. It also writes `.claude-plugin/types/`, which `mise run typecheck` needs. `mise run site` builds the site into `_site/` (GitHub Actions publishes it on a push to `main`).

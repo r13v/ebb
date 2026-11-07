@@ -1,0 +1,24 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: npm ci
+      # The tests and the validation run in the engine of this Claude Code version; they need no login.
+      - run: npm install --global @anthropic-ai/claude-code@2.1.319
+      - run: mise run check
+      - run: mise run knip
+      - run: mise run validate
+      - run: mise run test

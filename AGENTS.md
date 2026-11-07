@@ -20,7 +20,7 @@ Run everything through mise: `mise.toml` pins Node.js and hk (`mise install`), p
 - `mise run test` runs the mod tests in the engine's environment (`claude plugin test`). `mise run validate` reads the manifest and the hooks module as the engine does.
 - `mise run typecheck` needs `.claude-plugin/types/`, which the engine writes when it loads the mod; without it the task prints a warning and checks nothing. Run `mise run dev` once on a new checkout and after a Claude Code update, and say in the report when the types were missing.
 - Run only the checks that the change needs: `biome check <files>`, `mise run test`, `mise run typecheck` when types or exports change. `mise run verify` runs everything; the Git hook runs the same steps on staged files (`hk.pkl`). A documentation-only edit needs no code checks.
-- Tests use a stubbed engine. A change of what the band or the pane of `/ebb add` shows also needs a live check in `mise run dev` (`testing.md` § Live check); say in the report when you did not make one.
+- Tests use a stubbed engine. A change of what the band or the pane of `/ebb add` shows also needs a live check: `mise run live` inside agterm, otherwise by hand in `mise run dev` (`testing.md` § Live check); say in the report when you did not make one.
 - Read the exit code: do not pipe a check into `tail` without `set -o pipefail`.
 - Name in the report what you ran and what you did not.
 
@@ -32,5 +32,5 @@ Run `tree docs` at the beginning (without `tree`: `find docs -name '*.md' | sort
 
 - Only a review changes a schedule. Showing, revealing or skipping a card does not.
 - Every write of `data.json` goes through `mutate` in `hooks/register.tsx`, under the lock (`architecture-and-data.md` § Files and the lock).
-- Every push of a change under `hooks/`, `types/` or `.claude-plugin/` to `main` releases a new version (`.github/workflows/release.yml`). Do not bump the version by hand.
+- On every push, `.github/workflows/check.yml` runs Biome, Knip, validation and the tests (not the type check: CI has no engine types). When it passes on `main` and the mod changed since the last `v*` tag, `.github/workflows/release.yml` releases a new version. Do not bump the version by hand.
 - The mod never interrupts the user: it never takes the keys from the prompt, and no pane, toast or question opens unless the user ran `/ebb`.
