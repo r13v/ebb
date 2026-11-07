@@ -7,6 +7,9 @@ import { join } from 'node:path'
 const root = new URL('..', import.meta.url).pathname
 const out = join(root, '_site')
 mkdirSync(join(out, 'decks'), { recursive: true })
+mkdirSync(join(out, 'assets'), { recursive: true })
+for (const file of readdirSync(join(root, 'assets')))
+  copyFileSync(join(root, 'assets', file), join(out, 'assets', file))
 
 const esc = s =>
   String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
@@ -53,8 +56,8 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ebb — learn while Claude thinks</title>
-<meta name="description" content="ebb is a Claude Code plugin for spaced repetition: one card above the prompt, revealed and graded while Claude works.">
+<title>ebb — learn while your agent thinks</title>
+<meta name="description" content="ebb is spaced repetition for Claude Code and pi: one card above the prompt, graded in seconds while the agent works.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -93,7 +96,9 @@ h1 em { font-style: normal; color: var(--accent); }
 .lead { font-size: 19px; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
 .install { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px; }
 .install .row { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; }
-.install .row + .row { border-top: 1px solid var(--line); }
+.install .row + .row, .install .host + .row { border-top: 1px solid var(--line); }
+.install .host { padding: 10px 14px 4px; font: 600 12px Inter, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.install .row + .host { border-top: 1px solid var(--line); margin-top: 4px; }
 .install code { flex: 1; min-width: 0; font-size: 14px; overflow-x: auto; white-space: nowrap; }
 .install code::before { content: "$ "; color: var(--muted); }
 button.copy { flex: none; border: 0; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font: 600 13px Inter, sans-serif; padding: 9px 14px; cursor: pointer; transition: transform .15s ease, filter .15s ease; }
@@ -136,6 +141,10 @@ h2 { font: 700 34px/1.1 Fraunces, serif; letter-spacing: -0.02em; margin: 0 0 10
 .step h3 { margin: 0 0 6px; font-size: 18px; }
 .step p { margin: 0; color: var(--muted); font-size: 15px; }
 .step code { font-size: 13px; color: var(--ink); }
+.shots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.shots figure { margin: 0; }
+.shots img { width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid var(--line); }
+.shots figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
 
 .decks { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
 .deck { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
@@ -161,7 +170,7 @@ pre .k { color: var(--accent); }
 
 @media (max-width: 820px) {
   .hero, .make { grid-template-columns: 1fr; }
-  .steps { grid-template-columns: 1fr; }
+  .steps, .shots { grid-template-columns: 1fr; }
   .top nav a:not(:last-child) { display: none; }
   .hero { padding-top: 20px; }
 }
@@ -180,15 +189,18 @@ pre .k { color: var(--accent); }
 
   <div class="hero">
     <div>
-      <h1>Learn while <em>Claude</em> thinks.</h1>
-      <p class="lead">ebb is a Claude Code plugin for spaced repetition. One card waits above the prompt. Grade it while Claude works; skip it when you are busy, or hide the band with the <code>🌊 ebb</code> button under the prompt. Nothing ever interrupts you.</p>
+      <h1>Learn while your <em>agent</em> thinks.</h1>
+      <p class="lead">You wait for your coding agent dozens of times a day. ebb turns those seconds into a language or any other skill: one card above the prompt, graded with one key while the agent works. It runs in Claude Code and pi, with one schedule for both, and it never interrupts you.</p>
       <div class="install">
+        <div class="host">Claude Code</div>
         <div class="row"><code>claude plugin marketplace add r13v/ebb</code><button class="copy" data-copy="claude plugin marketplace add r13v/ebb">Copy</button></div>
         <div class="row"><code>claude plugin install ebb@ebb</code><button class="copy" data-copy="claude plugin install ebb@ebb">Copy</button></div>
+        <div class="host">pi</div>
+        <div class="row"><code>pi install npm:pi-ebb</code><button class="copy" data-copy="pi install npm:pi-ebb">Copy</button></div>
       </div>
-      <p class="small">Then restart Claude Code and pick a deck below, or make your own.</p>
+      <p class="small">Then restart the agent and pick a deck below, or make your own.</p>
     </div>
-    <div class="term" aria-label="Claude Code with ebb">
+    <div class="term" aria-label="A coding agent with ebb">
       <div class="dots"><i></i><i></i><i></i></div>
       <div class="you">❯ <b>fix the flaky login test</b></div>
       <div class="tool">⏺ <b>Read</b> tests/login.spec.ts</div>
@@ -204,24 +216,33 @@ pre .k { color: var(--accent); }
 
   <section>
     <h2>One line, no pop-ups</h2>
-    <p class="sub">ebb uses the waits you already have. It schedules cards with FSRS-6, the algorithm in Anki.</p>
+    <p class="sub">ebb uses the waits you already have. It schedules cards with FSRS-6, the algorithm in Anki, so each card comes back just before you would forget it.</p>
     <div class="steps">
       <div class="step"><span class="n">1</span><h3>A card</h3><p>Above the prompt, ebb shows the next card: a due one first, then a new one. You keep typing as usual.</p></div>
-      <div class="step"><span class="n">2</span><h3>Grade</h3><p>Got it (<code>g</code>) or Forgot (<code>f</code>): click, or press <code>ctrl+x tab</code> and the key. Skip puts the card aside for now.</p></div>
-      <div class="step"><span class="n">3</span><h3>Next</h3><p>Got it brings the next card at once. Forgot shows the answer with the note's hint, such as the gender of a word; Next (<code>f</code>) brings the next card.</p></div>
+      <div class="step"><span class="n">2</span><h3>Grade</h3><p>Got it or Forgot. In Claude Code, click, or press <code>ctrl+x tab</code> and <code>g</code> or <code>f</code>. In pi, press <code>alt+2</code> or <code>alt+1</code> straight from the prompt, or click. Skip puts the card aside for now.</p></div>
+      <div class="step"><span class="n">3</span><h3>Next</h3><p>Got it brings the next card at once. Forgot shows the answer with the note's hint, such as the gender of a word; Next (<code>f</code>, or <code>alt+1</code> in pi) brings the next card.</p></div>
+    </div>
+  </section>
+
+  <section id="shots">
+    <h2>In your agent</h2>
+    <p class="sub">The same card, the same schedule, in Claude Code and in pi.</p>
+    <div class="shots">
+      <figure><img src="assets/claude-code.png" alt="ebb in Claude Code: a Spanish card above the prompt while Claude reads a file" loading="lazy"><figcaption>Claude Code: click, or <code>ctrl+x tab</code> and a key.</figcaption></figure>
+      <figure><img src="assets/pi.png" alt="ebb in pi: a Spanish card above the editor while pi works" loading="lazy"><figcaption>pi: <code>alt+1</code>, <code>alt+2</code>, <code>alt+3</code> right from the prompt, or a click.</figcaption></figure>
     </div>
   </section>
 
   <section id="decks">
     <h2>Decks</h2>
-    <p class="sub">Copy the command and run it in Claude Code. Install the same deck again later to get its new notes; your progress stays.</p>
+    <p class="sub">Copy the command and run it in Claude Code or pi. Install the same deck again later to get its new notes; your progress stays.</p>
     <div class="decks">${decks.map(deckCard).join('')}
     </div>
   </section>
 
   <section id="make">
     <h2>Make a deck</h2>
-    <p class="sub">Ask Claude in your own language. It reads the language you learn from the request and answers in the language you write in. You tick the notes to keep.</p>
+    <p class="sub">Ask in your own language. The model reads the language you learn from the request and answers in the language you write in. A second call translates each note back and flags the ones that do not match. You tick the notes to keep.</p>
     <div class="make">
 <pre><span class="c"># a language deck</span>
 <span class="k">/ebb add</span> Spanish words for ordering at a bar
@@ -246,7 +267,7 @@ pre .k { color: var(--accent); }
     </div>
   </section>
 
-  <div class="foot"><span>ebb · MIT · made for Claude Code</span><a href="https://github.com/r13v/ebb">github.com/r13v/ebb</a></div>
+  <div class="foot"><span>ebb · MIT · for Claude Code and pi</span><a href="https://github.com/r13v/ebb">github.com/r13v/ebb</a></div>
 </div>
 <script>
 const demo = ${JSON.stringify(demo)};

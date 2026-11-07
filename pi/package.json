@@ -12,7 +12,7 @@
   "bugs": {
     "url": "https://github.com/r13v/ebb/issues"
   },
-  "homepage": "https://github.com/r13v/ebb/tree/main/pi#readme",
+  "homepage": "https://r13v.github.io/ebb/",
   "publishConfig": {
     "access": "public"
   },

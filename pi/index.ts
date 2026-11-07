@@ -4,7 +4,7 @@
 import { homedir } from 'node:os'
 
 import type { ExtensionAPI, ExtensionContext, Theme } from '@earendil-works/pi-coding-agent'
-import { type KeyId, matchesKey, truncateToWidth } from '@earendil-works/pi-tui'
+import { type KeyId, MouseRegion, matchesKey, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui'
 
 import {
   type BandView,
@@ -22,8 +22,14 @@ import { fileHost } from './host'
 
 const WIDGET = 'ebb'
 
-// Modified keys, so the editor keeps every key it types; `alt+f` moves a word, so Forgot is `alt+r`.
-const KEYS = { forgot: 'alt+r', got: 'alt+g', skip: 'alt+s', toggle: 'alt+h' } as const satisfies Record<string, KeyId>
+// Modified keys, so the editor keeps every key it types. On a Mac, Option works as Alt only when the
+// terminal sends it so; the band also takes clicks. `cmd` digits switch the terminal's tabs.
+const KEYS = { forgot: 'alt+1', got: 'alt+2', skip: 'alt+3', toggle: 'alt+h' } as const satisfies Record<string, KeyId>
+
+type Action = 'forgot' | 'got' | 'skip' | 'next'
+
+/** A piece of the band line; a piece with an action is a button that a click presses. */
+type Part = { text: string; action?: Action }
 
 const files = fileHost(homedir(), dataDir(homedir(), process.env.XDG_DATA_HOME))
 // Whether the person hid the band; kept beside the data, so it stays hidden in new sessions.
@@ -35,22 +41,62 @@ const textOf = (content: { type: string; text?: string }[]) =>
     .map(c => c.text)
     .join('')
 
-/** The lines of the band; none while it is hidden, paused or without a card. */
-const bandLines = (v: BandView, theme: Theme): string[] | undefined => {
-  if (v.kind === 'error') return [theme.fg('error', `ebb: cannot read the data: ${v.error}`)]
-  if (v.kind === 'no-deck') return [theme.fg('dim', 'ebb: /ebb add <topic> or /ebb install <file or URL> to get cards')]
+/** The pieces of the band; none while it is paused or without a card. */
+const bandParts = (v: BandView, theme: Theme): Part[] | undefined => {
+  if (v.kind === 'error') return [{ text: theme.fg('error', `ebb: cannot read the data: ${v.error}`) }]
+  if (v.kind === 'no-deck')
+    return [{ text: theme.fg('dim', 'ebb: /ebb add <topic> or /ebb install <file or URL> to get cards') }]
   if (v.kind === 'none') return undefined
 
   const f = v.face
-  const bar = theme.fg('dim', '│')
-  const key = (keys: string, label: string) => `${theme.fg('accent', keys)} ${label}`
+  const bar = { text: `  ${theme.fg('dim', '│')}  ` }
+  const button = (key: KeyId, label: string, action: Action): Part => ({
+    text: `${theme.fg('accent', key)} ${label}`,
+    action,
+  })
+  const gap = { text: '  ' }
   if (v.isRevealed) {
     const hint = f.hint ? theme.fg('dim', ` (${f.hint})`) : ''
-    return [`${theme.bold(f.ask)} — ${f.answer}${hint}  ${bar}  ${key(KEYS.forgot, 'Next')}`]
+    return [{ text: `${theme.bold(f.ask)} — ${f.answer}${hint}` }, bar, button(KEYS.forgot, 'Next', 'next')]
   }
-  const keys = [key(KEYS.forgot, 'Forgot'), key(KEYS.got, 'Got it'), key(KEYS.skip, 'Skip')].join('  ')
 
-  return [`${theme.bold(f.ask)}  ${bar}  ${keys}`]
+  return [
+    { text: theme.bold(f.ask) },
+    bar,
+    button(KEYS.forgot, 'Forgot', 'forgot'),
+    gap,
+    button(KEYS.got, 'Got it', 'got'),
+    gap,
+    button(KEYS.skip, 'Skip', 'skip'),
+  ]
+}
+
+/**
+ * The band as one line, indented as pi indents a widget, with the columns of its buttons. pi passes a
+ * click only in its fullscreen mode, so every button also has a key.
+ */
+const bandWidget = (parts: Part[], press: (action: Action) => void) => (_tui: unknown, _theme: Theme) => {
+  let buttons: { from: number; to: number; action: Action }[] = []
+  const line = {
+    render: (width: number) => {
+      let column = 1
+      buttons = []
+      for (const part of parts) {
+        const partWidth = visibleWidth(part.text)
+        if (part.action) buttons.push({ from: column, to: column + partWidth, action: part.action })
+        column += partWidth
+      }
+      return [truncateToWidth(` ${parts.map(p => p.text).join('')}`, width)]
+    },
+    invalidate: () => undefined,
+  }
+
+  return new MouseRegion(line, event => {
+    const hit = buttons.find(b => event.x >= b.from && event.x < b.to)
+    if (event.type !== 'click' || event.button !== 'left' || !hit) return undefined
+    press(hit.action)
+    return { handled: true }
+  })
 }
 
 export default function ebb(pi: ExtensionAPI) {
@@ -61,8 +107,8 @@ export default function ebb(pi: ExtensionAPI) {
   const draw = async () => {
     if (!ctx?.hasUI) return
     const ui = ctx.ui
-    const lines = isHidden ? undefined : bandLines(await session.bandView(host), ui.theme)
-    ui.setWidget(WIDGET, lines)
+    const parts = isHidden ? undefined : bandParts(await session.bandView(host), ui.theme)
+    ui.setWidget(WIDGET, parts && bandWidget(parts, action => void press(action)))
   }
 
   const host: Host = {
@@ -98,12 +144,26 @@ export default function ebb(pi: ExtensionAPI) {
     }
   }
 
-  /** A band shortcut acts only on a card the band shows. */
-  const onCard = (work: (isRevealed: boolean) => Promise<unknown>) =>
-    act(async () => {
-      const v = await session.bandView(host)
-      if (!isHidden && v.kind === 'card') await work(v.isRevealed)
-    })
+  /** What a button of the band does, from its key or a click; only on a card the band shows. */
+  const run = async (action: Action) => {
+    const v = await session.bandView(host)
+    if (isHidden || v.kind !== 'card') return
+    if (v.isRevealed) {
+      if (action === 'forgot' || action === 'next') await session.next(host)
+      return
+    }
+    if (action === 'forgot') await session.gradeCard(host, 1)
+    if (action === 'got') await session.gradeCard(host, 3)
+    if (action === 'skip') await session.skip(host)
+  }
+
+  const press = async (action: Action) => {
+    try {
+      await run(action)
+    } catch (error) {
+      notify(`ebb: ${String(error)}`, 'error')
+    }
+  }
 
   const showNextCard = async () => {
     const error = await session.showNextCard(host)
@@ -212,15 +272,15 @@ export default function ebb(pi: ExtensionAPI) {
 
   pi.registerShortcut(KEYS.forgot, {
     description: 'ebb: Forgot, or Next after the answer',
-    handler: onCard(isRevealed => (isRevealed ? session.next(host) : session.gradeCard(host, 1))),
+    handler: act(() => run('forgot')),
   })
   pi.registerShortcut(KEYS.got, {
     description: 'ebb: Got it',
-    handler: onCard(async isRevealed => !isRevealed && session.gradeCard(host, 3)),
+    handler: act(() => run('got')),
   })
   pi.registerShortcut(KEYS.skip, {
     description: 'ebb: skip the card',
-    handler: onCard(async isRevealed => !isRevealed && session.skip(host)),
+    handler: act(() => run('skip')),
   })
   pi.registerShortcut(KEYS.toggle, {
     description: 'ebb: hide or show the card above the editor',

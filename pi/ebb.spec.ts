@@ -51,8 +51,10 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-/** What the extension drew: the band above the editor and the notices. */
-type Screen = { band?: string[]; notes: string[] }
+type Widget = { render(width: number): string[]; handleMouse?(event: object): unknown }
+
+/** What the extension drew: the band above the editor, its component for clicks, and the notices. */
+type Screen = { band?: string[]; widget?: Widget; notes: string[] }
 
 /** A terminal that draws nothing; every member pi's UI context has, so a change of that contract fails the type check. */
 const uiStub = (theme: Theme): ExtensionUIContext => ({
@@ -88,8 +90,9 @@ const uiStub = (theme: Theme): ExtensionUIContext => ({
 
 /** The terminal: draws the band, keeps the notices, and drives the list of `/ebb add` with `keys`. */
 const terminal = (screen: Screen, theme: Theme, keys: string[]): Partial<ExtensionUIContext> => ({
-  setWidget: ((_key: string, lines: string[] | undefined) => {
-    screen.band = lines?.map(stripTerminalSequences)
+  setWidget: ((_key: string, content: ((tui: unknown, theme: Theme) => Widget) | undefined) => {
+    screen.widget = content?.({}, theme)
+    screen.band = screen.widget?.render(160).map(line => stripTerminalSequences(line).trim())
   }) as ExtensionUIContext['setWidget'],
   notify: text => void screen.notes.push(text),
   custom: async factory => {
@@ -176,17 +179,39 @@ test('a shortcut grades the card in the band, and the schedule and the log are s
   const pi = await startPi()
   await pi.session.prompt(`/ebb install ${join(dir, 'es.json')}`)
   const first = pi.screen.band?.[0]
-  expect(first).toMatch(/alt\+r Forgot {2}alt\+g Got it {2}alt\+s Skip/)
+  expect(first).toMatch(/alt\+1 Forgot {2}alt\+2 Got it {2}alt\+3 Skip/)
 
-  await pi.press('alt+r')
-  expect(pi.screen.band?.[0]).toMatch(/— (heart|hand).*alt\+r Next/)
-  await pi.press('alt+g') // Got it does nothing while the answer is open
-  await pi.press('alt+r')
+  await pi.press('alt+1')
+  expect(pi.screen.band?.[0]).toMatch(/— (heart|hand).*alt\+1 Next/)
+  await pi.press('alt+2') // Got it does nothing while the answer is open
+  await pi.press('alt+1')
   expect(pi.screen.band?.[0]).not.toBe(first)
 
   expect(await reps()).toBe(1)
   const [month] = await readdir(join(dir, 'ebb', 'log'))
   expect(await readdir(join(dir, 'ebb', 'log', month!))).toHaveLength(1)
+})
+
+/** A left click on the band at the first column of `label`, as pi's fullscreen mode passes it. */
+const click = (screen: Screen, label: string) => {
+  const line = screen.widget?.render(160)[0] ?? ''
+  const x = stripTerminalSequences(line).indexOf(label)
+  if (x < 0) throw new Error(`no ${label} in the band`)
+  const event = { type: 'click', button: 'left', x, y: 0, screenX: x, screenY: 0, width: 160, height: 1 }
+  return screen.widget?.handleMouse?.({ ...event, shift: false, alt: false, ctrl: false, clickCount: 1 })
+}
+
+test('a click on a button of the band grades the card as its key does', async () => {
+  const pi = await startPi()
+  await pi.session.prompt(`/ebb install ${join(dir, 'es.json')}`)
+  const first = pi.screen.band?.[0]
+
+  expect(click(pi.screen, 'Got it')).toEqual({ handled: true })
+
+  // A click runs its action without waiting, as pi's mouse dispatch does.
+  await vi.waitFor(() => expect(pi.screen.band?.[0]).not.toBe(first))
+  expect(await reps()).toBe(1)
+  expect(click(pi.screen, '│')).toBeUndefined() // not a button: the click stays with pi
 })
 
 test('the band stays hidden in the next session and takes no grade', async () => {
@@ -198,7 +223,7 @@ test('the band stays hidden in the next session and takes no grade', async () =>
   vi.resetModules()
   const next = await startPi()
   expect(next.screen.band).toBeUndefined()
-  await next.press('alt+g')
+  await next.press('alt+2')
   expect(await reps()).toBe(0)
 })
 

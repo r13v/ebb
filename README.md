@@ -1,16 +1,37 @@
 # ebb
 
-ebb is a Claude Code mod and a [pi](https://pi.dev) extension for spaced repetition. It teaches you words, phrases or any other facts while you do your normal work.
+**Learn while your agent thinks.**
+
+You wait for Claude Code or pi dozens of times a day. ebb turns those seconds into a language, or any other skill you want to keep: one card above the prompt, one key to grade it, and back to work.
+
+![ebb in Claude Code: a Spanish card above the prompt while Claude reads a file](assets/claude-code.png)
 
 Site and decks: <https://r13v.github.io/ebb/>
 
-- A band above the prompt shows one card: `el corazón  │  f: Forgot  g: Got it  s: Skip`.
-- Got it brings the next card at once. Forgot shows the answer, with the note's hint if it has one: `el corazón — heart  │  f: Next`.
-- You can do it while Claude works, or ignore the band. The `🌊 ebb` button under the prompt hides the band and shows it again. ebb never interrupts you.
+## Why ebb
 
-The scheduler is FSRS-6, the algorithm that Anki uses.
+- **It uses time you already lose.** A card takes a few seconds, and an agent turn takes longer. Fifty turns a day are fifty reviews, with no new habit to keep.
+- **It never gets in your way.** One line above the prompt. No pop-up, no sound, no focus stolen. Skip a card, hide the band, or ignore it: your prompt stays yours.
+- **It remembers for you.** FSRS-6, the scheduler that Anki uses, brings each card back just before you would forget it. A word you know waits weeks; a word you missed comes back in a minute.
+- **Decks in one command.** `/ebb add Spanish words for a bar` writes the notes, checks each one by translating it back, and lets you tick the ones to keep. Ask in your own language; the answers come in it.
+- **A deck to start with.** About 2000 words, phrases and idioms of Castilian Spanish with Russian translations, one command away.
+- **Claude Code and pi, one memory.** Grade a card in one agent, and the other knows. Your data is a local JSON file; nothing leaves your machine except the model calls of `/ebb add`.
+
+## Quick start
+
+1. Install ebb in your agent (below), then restart it.
+2. Install a deck, or make one:
+
+   ```text
+   /ebb install https://r13v.github.io/ebb/decks/es-ru.json
+   /ebb add Spanish words for ordering at a bar
+   ```
+
+3. Work as usual. When a card shows above the prompt, grade it: Got it brings the next card, Forgot shows the answer first.
 
 ## Install
+
+### Claude Code
 
 ```sh
 claude plugin marketplace add r13v/ebb
@@ -18,6 +39,10 @@ claude plugin install ebb@ebb
 ```
 
 Then restart Claude Code.
+
+- The band above the prompt shows one card: `el corazón  │  f: Forgot  g: Got it  s: Skip`.
+- Got it brings the next card at once. Forgot shows the answer, with the note's hint if it has one: `el corazón — heart  │  f: Next`.
+- The `🌊 ebb` button under the prompt hides the band and shows it again.
 
 To update, open `/plugin` in Claude Code, or run:
 
@@ -34,16 +59,19 @@ Every change of the plugin on `main` gets a new version and a `v*` tag (`.github
 pi install npm:pi-ebb
 ```
 
-The commands are the same `/ebb` commands. The card shows above the editor; grade it with shortcuts, so the editor keeps every key you type:
+![ebb in pi: the card above the editor while pi works](assets/pi.png)
 
-- `alt+r`: Forgot, and Next after the answer.
-- `alt+g`: Got it.
-- `alt+s`: Skip.
+The commands are the same `/ebb` commands. The card shows above the editor. Grade it with a shortcut or a click; the editor keeps every key you type:
+
+- `alt+1` (Option+1 on a Mac): Forgot, and Next after the answer.
+- `alt+2`: Got it.
+- `alt+3`: Skip.
 - `alt+h`: hide or show the card. It stays as you left it in new sessions.
+- Or click a button of the band. pi passes clicks in its fullscreen mode, the default.
+
+On a Mac, Option must work as Alt: in Ghostty or agterm set `macos-option-as-alt = true`, in iTerm2 set the Option key to Esc+. Otherwise Option+1 types `¡`; click the band instead.
 
 `/ebb add` uses the model of the session and shows the notes in a list: press `1` to `9` to tick a note, `a` to add the ticked notes, `x` or Escape to cancel.
-
-Claude Code and pi share the data, so a card you grade in one is graded in the other.
 
 ## Get cards
 
