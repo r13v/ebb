@@ -25,7 +25,7 @@ const demo = decks.flatMap(d =>
   d.notes
     .filter(n => n.front.length <= 22)
     .slice(0, 40)
-    .map(n => [n.front, n.back.split(';')[0].trim()]),
+    .map(n => [n.front, n.back.split(';')[0].trim(), n.hint ?? '']),
 )
 
 const deckCard = d => `
@@ -122,7 +122,8 @@ button.copy.done { background: var(--ink); color: var(--bg); }
 .term .grades { display: none; }
 .term .band.on .grades { display: block; }
 .term .band.on .ask { display: none; }
-.term .prompt { margin-top: 6px; padding-top: 6px; border-top: 1px solid #3a2f2b; color: var(--term-dim); }
+.term .prompt { margin-top: 6px; padding-top: 6px; border-top: 1px solid #3a2f2b; color: var(--term-dim); display: flex; justify-content: space-between; }
+.term .hint { color: var(--term-dim); }
 
 /* sections */
 section { padding: 56px 0; border-top: 1px solid var(--line); }
@@ -179,7 +180,7 @@ pre .k { color: var(--accent); }
   <div class="hero">
     <div>
       <h1>Learn while <em>Claude</em> thinks.</h1>
-      <p class="lead">ebb is a Claude Code plugin for spaced repetition. One card waits above the prompt. Show its answer and grade it while Claude works; skip it when you are busy. Nothing ever interrupts you.</p>
+      <p class="lead">ebb is a Claude Code plugin for spaced repetition. One card waits above the prompt. Show its answer and grade it while Claude works; skip it when you are busy, or hide the band with the <code>🌊 ebb</code> button under the prompt. Nothing ever interrupts you.</p>
       <div class="install">
         <div class="row"><code>claude plugin marketplace add r13v/ebb</code><button class="copy" data-copy="claude plugin marketplace add r13v/ebb">Copy</button></div>
         <div class="row"><code>claude plugin install ebb@ebb</code><button class="copy" data-copy="claude plugin install ebb@ebb">Copy</button></div>
@@ -194,9 +195,9 @@ pre .k { color: var(--accent); }
       <div class="reply"><span class="spin" id="spin">✻</span> <span class="word">Noodling</span><span class="meta">… (12s · ↓ 1.4k tokens)</span></div>
       <div class="band" id="band">
         <div class="ask"><b id="front">el corazón</b><span class="btn primary">[ Show ]</span><span class="btn">[ Skip ]</span></div>
-        <div class="grades"><b id="pair">el corazón — heart</b><span class="btn">[ Again 1m ]</span><span class="btn">[ Hard 6m ]</span><span class="btn primary">[ Good 10m ]</span><span class="btn">[ Easy 2d ]</span></div>
+        <div class="grades"><b id="pair">el corazón — heart</b><span class="hint" id="hint"></span><span class="btn">[ Again 1m ]</span><span class="btn">[ Hard 6m ]</span><span class="btn primary">[ Good 10m ]</span><span class="btn">[ Easy 2d ]</span></div>
       </div>
-      <div class="prompt">❯</div>
+      <div class="prompt">❯<span class="foot">🌊 ebb</span></div>
     </div>
   </div>
 
@@ -206,7 +207,7 @@ pre .k { color: var(--accent); }
     <div class="steps">
       <div class="step"><span class="n">1</span><h3>A card</h3><p>Above the prompt, ebb shows the next card: a due one first, then a new one. You keep typing as usual.</p></div>
       <div class="step"><span class="n">2</span><h3>Show</h3><p>Click Show, or press <code>ctrl+x tab</code> and <code>r</code>. Skip puts the card aside for now.</p></div>
-      <div class="step"><span class="n">3</span><h3>Grade</h3><p>Again, Hard, Good or Easy, each with its next interval. Then the next card comes.</p></div>
+      <div class="step"><span class="n">3</span><h3>Grade</h3><p>The answer comes with the note's hint, such as the gender of a word. Again, Hard, Good or Easy, each with its next interval. Then the next card comes.</p></div>
     </div>
   </section>
 
@@ -262,14 +263,14 @@ document.querySelectorAll('button.copy').forEach(btn => {
 // The band demo: a card above the prompt, then its answer and the grades.
 const glyphs = ['✻', '✢', '✳', '✶'];
 let g = 0, i = 0;
-const band = document.getElementById('band'), front = document.getElementById('front'), pair = document.getElementById('pair'), spin = document.getElementById('spin');
+const hintEl = document.getElementById('hint'), band = document.getElementById('band'), front = document.getElementById('front'), pair = document.getElementById('pair'), spin = document.getElementById('spin');
 setInterval(() => { spin.textContent = glyphs[g++ % glyphs.length]; }, 160);
 const cycle = () => {
   if (!demo.length) return;
-  const [f, back] = demo[i++ % demo.length];
+  const [f, back, hint] = demo[i++ % demo.length];
   band.classList.remove('on');
   front.textContent = f;
-  setTimeout(() => { pair.textContent = f + ' — ' + back; band.classList.add('on'); }, 2200);
+  setTimeout(() => { pair.textContent = f + ' — ' + back; hintEl.textContent = hint ? ' (' + hint + ')' : ''; band.classList.add('on'); }, 2200);
 };
 if (!matchMedia('(prefers-reduced-motion: reduce)').matches) { cycle(); setInterval(cycle, 4200); }
 </script>
