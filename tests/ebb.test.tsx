@@ -355,3 +355,17 @@ test('/ebb add @deck makes a deck of facts that asks one way', async ($, on) => 
   expect(data.decks.k8s.kinds).toEqual(['recognition'])
   expect((Object.values(data.notes) as { deck: string }[]).filter(n => n.deck === 'k8s')).toHaveLength(1)
 })
+
+test('the spinner has the next card before the prompt’s hooks run', async ($, on) => {
+  engine(on)
+  drawsWords(on)
+  const fs = disk(on)
+  await withDeck($, fs)
+  await turn($, 0)
+  const early = await $.ui.mount({ ...SPINNER, surface: 'terminal' })
+  const before = (await early.find({ type: 'Text' }))?.text
+  await early.unmount()
+  const fronts = (Object.values(fs.data().notes) as { front: string }[]).map(n => n.front)
+  expect(fronts).toContain(before)
+  expect((await turn($, 1)).word).toBe(before)
+})

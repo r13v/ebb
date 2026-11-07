@@ -199,7 +199,26 @@ let isTurnRunning = false
 let lastShownId: string | undefined
 const recentPrompts: string[] = []
 
-/** Chooses this turn's card, logs the exposure, and keeps its reveal for the turn line. */
+let upcoming: Face | undefined
+
+/**
+ * Chooses the next turn's card ahead, at session start and when a turn ends, and puts it in
+ * the spinner then: so the spinner shows it from its first frame, before any hook of the prompt.
+ */
+const prepareNextCard = async ($: $) => {
+  try {
+    const data = await load($)
+    const path = await passivePath($)
+    const passive: Passive = (await $.fs.exists(path)) ? JSON.parse(await $.fs.read(path)) : {}
+    upcoming = pickSpinnerCard(data, passive, Date.now(), lastShownId, Math.random)
+  } catch (error) {
+    upcoming = undefined
+    $.ui.log(`ebb: ${String(error)}`, { to: 'debug' })
+  }
+  await update($, spinnerWord, () => upcoming?.ask ?? null)
+}
+
+/** Takes this turn's card (the one prepared ahead, or a new pick), counts and logs the showing, and keeps its reveal for the turn line. */
 const showNextCard = async ($: $) => {
   try {
     const data = await load($)
@@ -212,9 +231,14 @@ const showNextCard = async ($: $) => {
       }
       return
     }
-    const path = await passivePath($)
-    const passive: Passive = (await $.fs.exists(path)) ? JSON.parse(await $.fs.read(path)) : {}
-    const picked = pickSpinnerCard(data, passive, now, lastShownId, Math.random)
+    let picked = upcoming && data.cards[upcoming.card.id] ? upcoming : undefined
+    upcoming = undefined
+    if (!picked) {
+      const path = await passivePath($)
+      const passive: Passive = (await $.fs.exists(path)) ? JSON.parse(await $.fs.read(path)) : {}
+      picked = pickSpinnerCard(data, passive, now, lastShownId, Math.random)
+    }
+    if ((data.meta.pausedUntil ?? 0) > now) picked = undefined
     if (picked) {
       lastShownId = picked.card.id
       await countShowing($, passiveKey(picked.card))
@@ -423,6 +447,7 @@ const runCommand = async ($: $, args: string): Promise<string | undefined> => {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    await prepareNextCard($)
     await $.command.register({ name: 'ebb', description: 'Spaced repetition: review, add, install, decks, pause, stats', argumentHint: '[add <topic> | install <file or URL> | decks | pause 1h | stats]' })
     return started
   })
@@ -455,7 +480,7 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       isTurnRunning = false
       current = undefined
-      await update($, spinnerWord, () => null)
+      await prepareNextCard($)
     }
     return next(e)
   })
