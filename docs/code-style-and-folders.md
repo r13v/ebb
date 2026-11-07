@@ -26,11 +26,11 @@ Priorities: readability, simplicity, maintainability. Biome (`biome.json`) check
 
 ## Folders
 
-- `hooks/register.tsx` is the only module that touches `$`: files, the lock, model calls, the UI and the events. It stays thin: it reads, calls a pure function and writes.
-- `hooks/model.ts`, `hooks/fsrs.ts`, `hooks/decks.ts` and `hooks/generate.ts` are pure: no `$`, no clock, no I/O. They take `now` as an argument. Put new logic here, where a test can call it directly.
-- `types/index.d.ts` is the contract of the mod's `$.state` values; `claude plugin validate` checks every key the module names against it.
-- `tests/` holds the tests (`testing.md`). `site/build.mjs` builds the Pages site and is plain Node.
-- The engine runs a hooks module without DOM and without Node: no `require`, no `import()`, no `node:` modules under `hooks/`.
+- `core/` is shared by both hosts and imports nothing of either. `core/ebb.ts` reaches files, the model and the band only through `Host`. `core/model.ts`, `core/fsrs.ts`, `core/decks.ts` and `core/generate.ts` are pure: no I/O, no clock; they take `now` as an argument. Put new logic in a pure module, where a test can call it directly.
+- `hooks/register.tsx` is the only module that touches `$`; `pi/index.ts` the only one that touches pi, and `pi/host.ts` Node's files. They stay thin: they adapt `Host` and draw.
+- `types/index.d.ts` is the contract of the mod's `$.state` values. It may not import, so it repeats the stored types of `core/ebb.ts`; `claude plugin validate` checks every key the module names against it.
+- `tests/` holds the tests of the core and the Claude Code mod, `pi/*.spec.ts` those of the pi extension (`testing.md`). `site/build.mjs` builds the Pages site and is plain Node.
+- The engine runs a hooks module and every file it imports without DOM and without Node: no `require`, no `import()`, no `node:` modules under `hooks/` and `core/`.
 
 ## Comments
 

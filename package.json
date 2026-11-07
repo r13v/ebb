@@ -4,7 +4,19 @@
   "type": "module",
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
+    "@earendil-works/pi-ai": "1.5.0",
+    "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-tui": "1.5.0",
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/github": "12.0.10",
+    "@semantic-release/npm": "13.2.0",
+    "@semantic-release/release-notes-generator": "14.1.1",
+    "@types/node": "26.6.6",
+    "conventional-changelog-conventionalcommits": "10.4.1",
     "knip": "6.44.2",
-    "typescript": "7.0.2"
+    "semantic-release": "25.0.9",
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
   }
 }

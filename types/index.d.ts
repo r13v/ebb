@@ -1,3 +1,6 @@
+// The shapes ebb keeps in `$.state`. The engine wants this contract self-contained, so it repeats
+// the types of `core/ebb.ts`; the type check of `hooks/register.tsx` fails when the two drift apart.
+
 /** A note the model proposed in `/ebb add`, before the user approves it. */
 export type Candidate = {
   front: string

@@ -195,7 +195,7 @@ pre .k { color: var(--accent); }
       <div class="tool">⏺ <b>Bash</b> npm test -- login</div>
       <div class="reply"><span class="spin" id="spin">✻</span> <span class="word">Noodling</span><span class="meta">… (12s · ↓ 1.4k tokens)</span></div>
       <div class="band" id="band">
-        <div class="ask"><b id="front">el corazón</b><span class="sep">│</span><span class="btn"><i>f</i>: Forgot 1m</span><span class="btn"><i>g</i>: Got it 10m</span><span class="btn"><i>s</i>: Skip</span></div>
+        <div class="ask"><b id="front">el corazón</b><span class="sep">│</span><span class="btn"><i>f</i>: Forgot</span><span class="btn"><i>g</i>: Got it</span><span class="btn"><i>s</i>: Skip</span></div>
         <div class="grades"><b id="pair">el corazón — heart</b><span class="hint" id="hint"></span><span class="sep">│</span><span class="btn"><i>f</i>: Next</span></div>
       </div>
       <div class="prompt">❯<span class="foot">🌊 ebb</span></div>
@@ -207,7 +207,7 @@ pre .k { color: var(--accent); }
     <p class="sub">ebb uses the waits you already have. It schedules cards with FSRS-6, the algorithm in Anki.</p>
     <div class="steps">
       <div class="step"><span class="n">1</span><h3>A card</h3><p>Above the prompt, ebb shows the next card: a due one first, then a new one. You keep typing as usual.</p></div>
-      <div class="step"><span class="n">2</span><h3>Grade</h3><p>Got it (<code>g</code>) or Forgot (<code>f</code>), each with when the card comes back: click, or press <code>ctrl+x tab</code> and the key. Skip puts the card aside for now.</p></div>
+      <div class="step"><span class="n">2</span><h3>Grade</h3><p>Got it (<code>g</code>) or Forgot (<code>f</code>): click, or press <code>ctrl+x tab</code> and the key. Skip puts the card aside for now.</p></div>
       <div class="step"><span class="n">3</span><h3>Next</h3><p>Got it brings the next card at once. Forgot shows the answer with the note's hint, such as the gender of a word; Next (<code>f</code>) brings the next card.</p></div>
     </div>
   </section>

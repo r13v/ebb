@@ -6,3 +6,6 @@ node_modules/
 mise.local.toml
 mise.local.lock
 hk.local.pkl
+# The pi package: its build and the license copied in for npm.
+pi/dist/
+pi/LICENSE

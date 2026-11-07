@@ -1,0 +1,38 @@
+{
+  "name": "pi-ebb",
+  "version": "0.0.0-development",
+  "description": "Spaced repetition in the background of pi: a card above the editor, graded with a shortcut",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/r13v/ebb.git",
+    "directory": "pi"
+  },
+  "bugs": {
+    "url": "https://github.com/r13v/ebb/issues"
+  },
+  "homepage": "https://github.com/r13v/ebb/tree/main/pi#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "pi-package",
+    "spaced-repetition",
+    "flashcards",
+    "fsrs"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-tui": "*"
+  }
+}

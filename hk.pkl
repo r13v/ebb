@@ -8,15 +8,23 @@ local checks = new Mapping<String, Step> {
     check = "biome check --no-errors-on-unmatched --files-ignore-unknown=true {{files}}"
   }
   // Neither Biome nor tsc sees an unused export or a dependency nothing imports.
-  ["knip"] = Builtins.knip
+  // Once from the root: the builtin runs in each folder with a package.json, and pi/ has one that the root knip.json covers.
+  ["knip"] {
+    glob = List("**/*.js", "**/*.mjs", "**/*.ts", "**/*.tsx", "**/package.json", "knip.json")
+    check = "knip"
+  }
   // Biome does not check types. The engine writes the types the check needs (`mise run typecheck`).
   ["tsc"] {
-    glob = List("hooks/**/*.ts", "hooks/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "types/**/*.ts")
+    glob = List("hooks/**/*.ts", "hooks/**/*.tsx", "core/**/*.ts", "tests/**/*.ts", "tests/**/*.tsx", "types/**/*.ts")
     check = "mise run typecheck"
+  }
+  ["pi"] {
+    glob = List("core/**/*.ts", "pi/**/*.ts")
+    check = "mise run pi:typecheck && mise run pi:test"
   }
   // The engine refuses a hooks module that validation rejects.
   ["validate"] {
-    glob = List("hooks/**", "types/**", ".claude-plugin/**")
+    glob = List("hooks/**", "core/**", "types/**", ".claude-plugin/**")
     check = "claude plugin validate ."
   }
 }

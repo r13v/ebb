@@ -1,11 +1,11 @@
 # ebb: instructions for coding agents
 
-ebb is a Claude Code mod: a hooks module that the engine loads from `hooks/hooks.json`. `README.md` is for people who install it; `CONTEXT.md` is the glossary.
+ebb is a Claude Code mod (a hooks module that the engine loads from `hooks/hooks.json`) and a pi extension (`pi/`, published to npm as `pi-ebb`). Both adapt one core, `core/`. `README.md` is for people who install it; `CONTEXT.md` is the glossary.
 
 ## Working rules
 
 1. **Think before coding.** State the significant assumptions and the success criteria. Research the facts yourself; if an ambiguity changes the result, ask. Propose a simpler solution when it solves the task.
-2. **Simplicity first.** Write the minimum code for the current task, without features for the future and without one-time abstractions. In a design choice, recommend the option without a new field, layer or setting. Before you write your own implementation, check what `$` of the engine already gives (grep `.claude-plugin/types/claude-code/index.d.ts`).
+2. **Simplicity first.** Write the minimum code for the current task, without features for the future and without one-time abstractions. In a design choice, recommend the option without a new field, layer or setting. Before you write your own implementation, check what `$` of the engine already gives (grep `.claude-plugin/types/claude-code/index.d.ts`) or what pi gives (`node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts`).
 3. **Surgical changes.** Change only what is necessary. Keep existing user changes, including staged ones. Do not include adjacent fixes and refactoring in the task.
 4. **Goal-driven execution.** Bring the result to verification. Fix the errors that your change causes, run the affected checks again and report their limits.
 5. **Read before writing.** Before a change, read the affected exports, their direct consumers and the owner document of the topic. Do not replace a contract that you do not understand with a guess.
@@ -18,9 +18,10 @@ ebb is a Claude Code mod: a hooks module that the engine loads from `hooks/hooks
 Run everything through mise: `mise.toml` pins Node.js and hk (`mise install`), puts `node_modules/.bin` on `PATH`, reinstalls the npm tree when the lockfile changed and installs the Git hook. `mise tasks` lists the tasks.
 
 - `mise run test` runs the mod tests in the engine's environment (`claude plugin test`). `mise run validate` reads the manifest and the hooks module as the engine does.
+- `mise run pi:test`, `mise run pi:typecheck` and `mise run pi:build` (Vite) check and build the pi extension. A change of `core/` needs the checks of both hosts.
 - `mise run typecheck` needs `.claude-plugin/types/`, which the engine writes when it loads the mod; without it the task prints a warning and checks nothing. Run `mise run dev` once on a new checkout and after a Claude Code update, and say in the report when the types were missing.
-- Run only the checks that the change needs: `biome check <files>`, `mise run test`, `mise run typecheck` when types or exports change. `mise run verify` runs everything; the Git hook runs the same steps on staged files (`hk.pkl`). A documentation-only edit needs no code checks.
-- Tests use a stubbed engine. A change of what the band or the pane of `/ebb add` shows also needs a live check: `mise run live` inside agterm, otherwise by hand in `mise run dev` (`testing.md` § Live check); say in the report when you did not make one.
+- Run only the checks that the change needs: `biome check <files>`, `mise run test`, `mise run typecheck` when types or exports change, the `pi:` tasks when `core/` or `pi/` changes. `mise run verify` runs everything; the Git hook runs the same steps on staged files (`hk.pkl`). A documentation-only edit needs no code checks.
+- Tests use a stubbed engine. A change of what the band or the pane of `/ebb add` shows also needs a live check (for pi: `mise run pi:dev`): `mise run live` inside agterm, otherwise by hand in `mise run dev` (`testing.md` § Live check); say in the report when you did not make one.
 - Read the exit code: do not pipe a check into `tail` without `set -o pipefail`.
 - Name in the report what you ran and what you did not.
 
@@ -31,6 +32,7 @@ Run `tree docs` at the beginning (without `tree`: `find docs -name '*.md' | sort
 ## Invariants
 
 - Only a review changes a schedule. Showing, revealing or skipping a card does not.
-- Every write of `data.json` goes through `mutate` in `hooks/register.tsx`, under the lock (`architecture-and-data.md` § Files and the lock).
-- On every push, `.github/workflows/check.yml` runs Biome, Knip, validation and the tests (not the type check: CI has no engine types). When it passes on `main` and the mod changed since the last `v*` tag, `.github/workflows/release.yml` releases a new version. Do not bump the version by hand.
-- The mod never interrupts the user: it never takes the keys from the prompt, and no pane, toast or question opens unless the user ran `/ebb`.
+- Every write of `data.json` goes through `mutate` in `core/ebb.ts`, under the lock (`architecture-and-data.md` § Files and the lock).
+- On every push, `.github/workflows/check.yml` runs Biome, Knip, validation, the tests and the pi checks (not the type check of the mod: CI has no engine types). When it passes on `main` and the mod changed since the last `v*` tag, `.github/workflows/release.yml` releases a new version. `.github/workflows/release-pi.yml` publishes the pi package from the commit messages. Do not bump a version by hand.
+- Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `ci:`; `!` or a `BREAKING CHANGE:` footer for a breaking change). semantic-release reads them: `fix:` and `feat:` publish the pi package, so use them for a change a user of either host sees.
+- The mod never interrupts the user: it never takes the keys from the prompt, and no pane, toast or question opens unless the user ran `/ebb`. In pi the band takes only modified keys (`alt+…`), never a key the editor types.

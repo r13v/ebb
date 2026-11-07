@@ -1,7 +1,7 @@
 // Prompts and parsers for model calls: generating notes and checking them.
-// Pure: register.tsx makes the calls.
+// Pure: `ebb.ts` makes the calls.
 
-import type { Candidate } from '../types'
+import type { Candidate } from './ebb'
 import type { Deck, NoteInput } from './model'
 
 const describeDeck = (deck: Deck) =>

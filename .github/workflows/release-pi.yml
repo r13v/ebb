@@ -1,0 +1,36 @@
+name: Release pi
+
+# Publishes the pi extension (pi/) to npm as pi-ebb. semantic-release reads the Conventional
+# Commits since the last pi-v* tag: fix: makes a patch, feat: a minor, a breaking change a major,
+# and a push with neither publishes nothing. npm trusts this workflow through OIDC, with no token.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: release-pi
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v2
+      - run: npm ci
+      - run: mise run pi:typecheck
+      - run: mise run pi:test
+      - run: mise run pi:build
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release

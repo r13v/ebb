@@ -157,21 +157,5 @@ export function scheduler(options: Options = {}) {
     return { state, step, stability, difficulty, due: now + delay, lastReview: now }
   }
 
-  /** What each rating would give, for the labels on the grade buttons. */
-  const preview = (s: Schedule, now: number) =>
-    ([1, 2, 3, 4] as const).map(r => ({ rating: r, due: review(s, r, now).due }))
-
-  return { review, preview }
-}
-
-/** `65_000` → `1m`, `3 * DAY` → `3d`. */
-export const formatDelay = (ms: number): string => {
-  const min = Math.round(ms / MINUTE)
-  if (min < 60) return `${Math.max(1, min)}m`
-  const hours = Math.round(ms / 3_600_000)
-  if (hours < 24) return `${hours}h`
-  const days = Math.round(ms / DAY)
-  if (days < 31) return `${days}d`
-  if (days < 365) return `${Math.round(days / 30)}mo`
-  return `${(days / 365).toFixed(1).replace('.0', '')}y`
+  return { review }
 }

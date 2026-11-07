@@ -55,7 +55,7 @@
   },
   "overrides": [
     {
-      "includes": ["tests/**"],
+      "includes": ["tests/**", "pi/**/*.spec.ts"],
       "linter": {
         "rules": {
           "suspicious": {

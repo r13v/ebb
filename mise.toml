@@ -46,6 +46,22 @@ fi
 tsc --noEmit -p .
 """
 
+[tasks."pi:build"]
+description = "The pi extension into pi/dist/, with the license npm publishes beside it"
+run = ["vite build --config pi/vite.config.ts", "cp LICENSE pi/LICENSE"]
+
+[tasks."pi:test"]
+description = "The pi extension tests in Node"
+run = "vitest run --config pi/vite.config.ts"
+
+[tasks."pi:typecheck"]
+description = "TypeScript over the pi extension and the core"
+run = "tsc --noEmit -p pi"
+
+[tasks."pi:dev"]
+description = "A pi session with the extension of this checkout"
+run = "pi -e {{config_root}}/pi/index.ts"
+
 [tasks.check]
 description = "Biome over the whole checkout"
 run = "biome check ."
@@ -62,8 +78,8 @@ description = "The GitHub Pages site into _site/"
 run = "node site/build.mjs"
 
 [tasks.verify]
-description = "Biome, Knip, TypeScript, validation and the tests"
-run = [{ tasks = ["check", "knip", "typecheck", "validate", "test"] }]
+description = "Biome, Knip, TypeScript, validation, the tests and the pi build"
+run = [{ tasks = ["check", "knip", "typecheck", "validate", "test", "pi:typecheck", "pi:test", "pi:build"] }]
 
 [tasks.pre-commit]
 description = "The checks the Git hook runs; steps in hk.pkl"

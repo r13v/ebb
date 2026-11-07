@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { parseDeckFile } from '../hooks/decks'
-import { flagMismatches, parseNotes } from '../hooks/generate'
+import { parseDeckFile } from '../core/decks'
+import { flagMismatches, parseNotes } from '../core/generate'
 import {
   addNotes,
   DAY,
@@ -12,7 +12,7 @@ import {
   nextCard,
   parseDuration,
   upgrade,
-} from '../hooks/model'
+} from '../core/model'
 
 const seeded = (): Data => {
   const data = emptyData()

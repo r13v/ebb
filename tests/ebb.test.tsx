@@ -1,10 +1,10 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { addNotes, emptyData, ensureDeck, grade } from '../hooks/model'
+import { addNotes, emptyData, ensureDeck, grade } from '../core/model'
 
 const HOME = '/home/u'
-const DIR = `${HOME}/.claude/ebb`
+const DIR = `${HOME}/.local/share/ebb`
 
 /** A file system in memory, with the `mkdir`, `mv` and `rm` the lock uses. */
 const disk = (on: On, seed: Record<string, string> = {}, onSleep?: () => void) => {

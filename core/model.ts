@@ -1,4 +1,4 @@
-// The data of ebb and the pure operations on it. No `$` here: register.tsx
+// The data of ebb and the pure operations on it. No I/O here: `ebb.ts`
 // reads and writes the files, this module decides.
 
 import { newSchedule, type Rating, type Schedule, scheduler } from './fsrs'

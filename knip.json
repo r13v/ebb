@@ -1,6 +1,13 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["hooks/register.tsx", "tests/**/*.test.{ts,tsx}"],
-  "project": ["hooks/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}", "types/**/*.ts", "site/**/*.mjs"],
-  "ignoreDependencies": ["claude-code"]
+  "entry": ["hooks/register.tsx", "tests/**/*.test.{ts,tsx}", "pi/**/*.spec.ts"],
+  "project": [
+    "hooks/**/*.{ts,tsx}",
+    "core/**/*.ts",
+    "pi/**/*.ts",
+    "tests/**/*.{ts,tsx}",
+    "types/**/*.ts",
+    "site/**/*.mjs"
+  ],
+  "ignoreDependencies": ["claude-code", "conventional-changelog-conventionalcommits", "@semantic-release/.+"]
 }

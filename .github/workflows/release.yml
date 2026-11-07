@@ -38,7 +38,7 @@ jobs:
           git checkout -q "$SHA"
           # Only a change of the mod since the last release makes a new version.
           last="$(git describe --tags --abbrev=0 --match 'v*')"
-          if git diff --quiet "$last" "$SHA" -- hooks types .claude-plugin; then
+          if git diff --quiet "$last" "$SHA" -- hooks core types .claude-plugin; then
             echo "No change of the mod since $last; skipping"
             exit 0
           fi
@@ -48,7 +48,7 @@ jobs:
           next="$major.$minor.$((patch + 1))"
           jq --arg v "$next" '.version = $v' "$manifest" > "$manifest.new" && mv "$manifest.new" "$manifest"
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit -q -m "Release v$next" -- "$manifest"
+            commit -q -m "chore(release): v$next" -- "$manifest"
           git tag "v$next"
           # Both or neither: a main that moved since the fetch refuses the push.
           # A push made with the workflow's token starts no new run.
