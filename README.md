@@ -19,17 +19,46 @@ Then restart Claude Code.
 
 ## Get cards
 
-ebb starts with no deck. You can take a deck that comes with ebb, or let Claude write one.
+ebb comes with no cards. Make a deck, or install one.
 
-- `/ebb deck` lists the bundled decks. `/ebb deck es-ru` adds one: about 2000 frequent words, phrases and idioms of Castilian Spanish with Russian translations.
-- `/ebb add <topic>` makes a deck on the first use. Write the request in your own language, for example `/ebb add испанские слова для бара` or `/ebb add Spanish words for a bar`. Claude reads the language you learn from the request and gives the answers in the language you write in. If it cannot tell your language, the pane asks once. A topic that is not about a language, such as `/ebb add @k8s pods`, makes a deck of questions and answers.
+- **Make one:** `/ebb add <topic>`. Write the request in your own language, for example `/ebb add испанские слова для бара` or `/ebb add Spanish words for a bar`. Claude takes the language you learn from the request and gives the answers in the language you write in. If it cannot tell your language, the pane asks once. A topic that is not about a language, such as `/ebb add @k8s pods`, makes a deck of questions and answers.
+- **Install one:** `/ebb install <file or URL>` adds a deck file. For example, about 2000 words, phrases and idioms of Castilian Spanish with Russian translations:
+
+  ```text
+  /ebb install https://raw.githubusercontent.com/r13v/ebb/main/decks/es-ru.json
+  ```
+
+  Install the same file again to get its new notes. Your cards keep their schedule.
+
+### Deck file
+
+A deck file is JSON:
+
+```json
+{
+  "id": "es-en",
+  "name": "Spanish for English speakers",
+  "learn": "Spanish",
+  "native": "English",
+  "guidance": "Nouns carry their article.",
+  "notes": [
+    {"front": "el agua", "back": "water", "hint": "el, although agua is feminine", "tags": ["noun"]}
+  ]
+}
+```
+
+- `id` and `name` are necessary. The `id` has lowercase letters, digits and hyphens.
+- `learn` and `native` make a language deck: the language you learn and the language of the answers. Without them, the deck asks questions in one direction only.
+- `guidance` is optional: more instructions for the notes that `/ebb add` writes in this deck.
+- New cards come in the order of `notes`.
 
 ## Commands
 
 | Command | Result |
 |---|---|
 | `/ebb` | Opens the study pane. |
-| `/ebb deck [id]` | Lists the bundled decks, or adds the deck with that id. |
+| `/ebb install <file or URL>` | Adds a deck file, or the new notes of a deck file you installed before. |
+| `/ebb decks` | Lists your decks with their cards, due cards and new cards. |
 | `/ebb add <topic>` | Claude writes up to 9 new notes on the topic. In a language deck, a second model call translates each note back and flags the notes that do not match. You select the notes to add. |
 | `/ebb add @<deck> <topic>` | The same for a named deck. ebb creates the deck on first use. With more than one deck, the name is necessary. |
 | `/ebb pause [1h\|30m\|2d\|off]` | Stops the cards in the spinner for that time. The default is 1 hour. |
@@ -58,7 +87,7 @@ In the pane of `/ebb add`:
 - Each card gives way after 3 showings in the spinner since its last review. Thus the spinner moves through the deck on its own, about one new word for each 3 turns, also when you never open `/ebb`. A review starts the count again. To change the number, set `passiveShows` on the deck in `data.json`.
 - When every card has had its showings, the spinner shows any card you have met.
 - A card in the spinner does not change its schedule. The counts of showings are in `~/.claude/ebb/passive.json`.
-- A bundled deck gets the new notes of a newer ebb version at the next start. A word that is in two lists of the deck has the meanings of both: `mejor` is `лучший; лучше`.
+- When a deck file has the same front twice, the note gets the meanings of both: `mejor` is `лучший; лучше`.
 - The spinner never shows a card with more than 40 characters on its front.
 
 The terms are defined in [CONTEXT.md](CONTEXT.md).

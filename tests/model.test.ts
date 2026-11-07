@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { flagMismatches, parseNotes } from '../hooks/generate'
-import { interleave, parseList } from '../hooks/decks'
+import { parseDeckFile } from '../hooks/decks'
 import { DAY, PASSIVE_SHOWS, addNotes, emptyData, ensureDeck, grade, newLeftToday, nextStudyCard, parseDuration, passiveKey, pickSpinnerCard, upgrade, type Data, type Passive } from '../hooks/model'
 
 const seeded = (): Data => {
@@ -78,12 +78,15 @@ test('a deck without production never unlocks it', async () => {
   expect(grade(data, id, 3, 60 * DAY).unlocked).toBeUndefined()
 })
 
-test('deck lists parse into notes', async () => {
-  expect(parseList('# comment\nel agua|вода\n\nTomar el pelo|подшучивать|букв. «взять за волосы»', 'noun')).toEqual([
-    { front: 'el agua', back: 'вода', tags: ['noun'] },
-    { front: 'Tomar el pelo', back: 'подшучивать', hint: 'букв. «взять за волосы»', tags: ['noun'] },
-  ])
-  expect(interleave([[1, 2, 3], [10], [20, 21]])).toEqual([1, 10, 20, 2, 21, 3])
+test('a deck file parses into a deck and its notes, or says what is wrong', async () => {
+  const file = parseDeckFile(JSON.stringify({ id: 'es', name: 'Spanish', learn: 'Spanish', native: 'English', notes: [{ front: 'el agua', back: 'water', hint: 'el, not la' }, { front: '', back: 'x' }] }))
+  if ('error' in file) throw new Error(file.error)
+  expect(file.deck.kinds).toEqual(['recognition', 'production'])
+  expect(file.notes).toEqual([{ front: 'el agua', back: 'water', hint: 'el, not la', tags: [] }])
+  const facts = parseDeckFile(JSON.stringify({ id: 'k8s', name: 'Kubernetes', notes: [{ front: 'q', back: 'a' }] }))
+  expect('error' in facts ? facts.error : facts.deck.kinds).toEqual(['recognition'])
+  expect(parseDeckFile('not json')).toEqual({ error: 'the file is not JSON' })
+  expect(parseDeckFile(JSON.stringify({ id: 'Bad Id', name: 'x', notes: [] }))).toMatchObject({ error: expect.stringMatching(/id/) })
 })
 
 test('model replies: bad JSON is an error, a wrong back-translation is flagged', async () => {

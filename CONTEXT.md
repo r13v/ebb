@@ -7,8 +7,8 @@ ebb teaches any skill by spaced repetition inside Claude Code, in the background
 **Deck**: A named set of notes on one subject, such as Castilian Spanish.
 _Avoid_: Collection, course, set
 
-**Bundled deck**: A deck that comes with ebb, in `decks/`; `/ebb deck` adds it.
-_Avoid_: Built-in deck, preset
+**Deck file**: A deck as one JSON file that `/ebb install` adds from a path or a URL.
+_Avoid_: Bundled deck, preset, package
 
 **Language deck**: A deck that teaches a language; it knows the language learned and the language of the answers, and makes both recognition and production cards.
 _Avoid_: Vocabulary deck

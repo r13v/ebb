@@ -104,26 +104,32 @@ const ebb = (args: string) => ({ command: 'ebb', args, origin: { kind: 'human' }
 
 const SPINNER = { plugin: 'ebb', component: 'Spinner', requestId: 'main', props: { word: 'Sauteing', message: null, suffix: '…', mode: 'thinking' } } as const
 
-/** Starts a session with the bundled Spanish deck added through `/ebb deck`. */
-const withDeck = async ($: any) => {
+/** A small Spanish deck file, as `/ebb install` reads it. */
+const deckFile = (notes: [string, string][] = [['el corazón', 'heart'], ['la mano', 'hand'], ['hablar', 'to speak'], ['¿Qué tal?', 'How are you?']]) =>
+  JSON.stringify({ id: 'es', name: 'Spanish', learn: 'Spanish', native: 'English', notes: notes.map(([front, back]) => ({ front, back })) })
+
+/** Starts a session with a deck installed from a file. */
+const withDeck = async ($: any, fs: ReturnType<typeof disk>) => {
+  fs.files.set(`${HOME}/decks/es.json`, { text: deckFile(), mtimeMs: 0 })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  return $.command.run(ebb('deck es-ru'))
+  return $.command.run(ebb('install ~/decks/es.json'))
 }
 
 const PANE = { plugin: 'ebb', component: 'Pane', requestId: 'ebb', surface: 'terminal', props: { title: 'ebb', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} } } as const
 
-test('/ebb deck lists the bundled decks and adds one; a later start leaves the file alone', async ($, on) => {
+test('/ebb install adds a deck from a file or a URL, and again only what is new', async ($, on) => {
   engine(on)
+  on('http.fetch', (_, e) =>
+    ({ value: e.url.endsWith('/es.json') ? { status: 200, ok: true, headers: {}, text: deckFile([['el corazón', 'heart'], ['la casa', 'house']]) } : { status: 404, ok: false, headers: {}, text: '' } }) as never,
+  )
   const fs = disk(on)
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  expect((await $.command.run(ebb('deck'))).text).toMatch(/  es-ru — /)
-  expect((await $.command.run(ebb('deck es-ru'))).text).toMatch(/Added .*: \d{4} notes/)
-  expect(fs.data().decks['es-ru'].native).toBe('Russian')
-  expect((await $.command.run(ebb('deck'))).text).toMatch(/✓ es-ru/)
+  expect((await withDeck($, fs)).text).toMatch(/Installed Spanish: 4 new notes/)
+  expect(fs.data().decks.es.kinds).toEqual(['recognition', 'production'])
+  expect((await $.command.run(ebb('install https://example.com/es.json'))).text).toMatch(/1 new notes/)
+  expect((await $.command.run(ebb('install https://example.com/none.json'))).text).toMatch(/HTTP 404/)
+  expect((await $.command.run(ebb('install ~/missing.json'))).text).toMatch(/No file/)
+  expect((await $.command.run(ebb('decks'))).text).toMatch(/es — Spanish: 5 cards, 0 due, 5 new/)
   expect(fs.dirs.has(`${DIR}/lock`)).toBe(false)
-  const written = fs.files.get(`${DIR}/data.json`)!.mtimeMs
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-  expect(fs.files.get(`${DIR}/data.json`)!.mtimeMs).toBe(written)
 })
 
 test('without a deck the spinner stays as it is and one turn line says how to get one', async ($, on) => {
@@ -137,14 +143,14 @@ test('without a deck the spinner stays as it is and one turn line says how to ge
     expect(word).toBe('Sauteing')
     lines.push(line)
   }
-  expect(lines.filter(l => l.includes('/ebb deck'))).toHaveLength(1)
+  expect(lines.filter(l => l.includes('/ebb install'))).toHaveLength(1)
 })
 
 test('a turn puts a card in the spinner and its answer on the turn line', async ($, on) => {
   engine(on)
   drawsWords(on)
   const fs = disk(on)
-  await withDeck($)
+  await withDeck($, fs)
   await $.prompt.submit(typed('fix the build'))
   await $.turn.start({ text: 'fix the build', turnId: 't1' })
   const spinner = await $.ui.mount({ ...SPINNER, surface: 'terminal' })
@@ -166,7 +172,7 @@ test('a turn puts a card in the spinner and its answer on the turn line', async 
 test('a subagent turn changes nothing', async ($, on) => {
   engine(on)
   const fs = disk(on)
-  await withDeck($)
+  await withDeck($, fs)
   await $.turn.start({ text: 'x', turnId: 't2', agentId: 'a1' })
   expect([...fs.files.keys()].some(p => p.includes('/log/'))).toBe(false)
 })
@@ -175,7 +181,7 @@ test('two turns in a row never show the same card', async ($, on) => {
   engine(on)
   drawsWords(on)
   const fs = disk(on)
-  await withDeck($)
+  await withDeck($, fs)
   const words: string[] = []
   for (let n = 0; n < 12; n++) words.push((await turn($, n)).word)
   for (let i = 1; i < words.length; i++) expect(words[i]).not.toBe(words[i - 1])
@@ -185,7 +191,7 @@ test('a prompt queued during a turn keeps that turn’s card', async ($, on) => 
   engine(on)
   drawsWords(on)
   const fs = disk(on)
-  await withDeck($)
+  await withDeck($, fs)
   await $.prompt.submit(typed('first'))
   await $.turn.start({ text: 'first', turnId: 'q1' })
   const before = await $.ui.mount({ ...SPINNER, surface: 'terminal' })
@@ -200,7 +206,7 @@ test('a prompt queued during a turn keeps that turn’s card', async ($, on) => 
 test('the study pane reveals, grades once on a double press, and logs the review', async ($, on) => {
   engine(on)
   const fs = disk(on)
-  await withDeck($)
+  await withDeck($, fs)
   await $.command.run(ebb(''))
   const ui = await $.ui.mount(PANE)
   expect(await ui.find({ type: 'Button', text: /Show answer/ })).toBeDefined()
@@ -216,8 +222,8 @@ test('the study pane reveals, grades once on a double press, and logs the review
 
 test('the card just graded Again does not come straight back', async ($, on) => {
   engine(on)
-  disk(on)
-  await withDeck($)
+  const fs = disk(on)
+  await withDeck($, fs)
   await $.command.run(ebb(''))
   const ui = await $.ui.mount(PANE)
   const first = (await ui.find({ type: 'Text', bold: true } as never))?.text
@@ -230,7 +236,7 @@ test('the card just graded Again does not come straight back', async ($, on) => 
 test('a stale lock of a dead session is taken over', async ($, on) => {
   engine(on)
   const fs = disk(on)
-  await withDeck($)
+  await withDeck($, fs)
   fs.dirs.set(`${DIR}/lock`, Date.now() - 60_000)
   expect((await $.command.run(ebb('pause 1h'))).text).toMatch(/Paused until/)
   expect(fs.data().meta.pausedUntil).toBeGreaterThan(Date.now())
@@ -243,7 +249,7 @@ test('a write waits while another session holds the lock', async ($, on) => {
   const fs = disk(on, {}, () => {
     if (++sleeps === 3) fs.dirs.delete(`${DIR}/lock`)
   })
-  await withDeck($)
+  await withDeck($, fs)
   fs.dirs.set(`${DIR}/lock`, Date.now())
   expect((await $.command.run(ebb('pause 1h'))).text).toMatch(/Paused until/)
   expect(sleeps).toBeGreaterThanOrEqual(3)
@@ -268,7 +274,7 @@ test('/ebb add flags a bad back-translation and adds only ticked notes', async (
   engine(on)
   replies(on, '{"notes":[{"front":"el chiringuito","back":"пляжный бар"},{"front":"la caña","back":"бокал пива"}]}', '{"fronts":["el chiringuito","la cerveza"]}')
   const fs = disk(on)
-  await withDeck($)
+  await withDeck($, fs)
   await $.command.run(ebb('add бар'))
   const ui = await $.ui.mount(PANE)
   await waitForList(ui)
@@ -283,8 +289,8 @@ test('/ebb add flags a bad back-translation and adds only ticked notes', async (
 test('/ebb add with a failed back-translation ticks nothing and says so', async ($, on) => {
   engine(on)
   replies(on, '{"notes":[{"front":"el chiringuito","back":"пляжный бар"}]}', null)
-  disk(on)
-  await withDeck($)
+  const fs = disk(on)
+  await withDeck($, fs)
   await $.command.run(ebb('add бар'))
   const ui = await $.ui.mount(PANE)
   await waitForList(ui)

@@ -1,38 +1,41 @@
-// Bundled decks: the decks that come with ebb, in `decks/`.
+// Deck files: a deck as one JSON file that `/ebb install` reads from a path or a URL.
 
-import type { NoteInput } from './model'
+import type { Deck, NoteInput } from './model'
 
-export type BundledDeck = {
-  id: string
-  name: string
-  description: string
-  /** The language the deck teaches, and the language of its answers; absent for a deck of facts. */
-  learn?: string
-  native?: string
-  /** Extra instructions for `/ebb add` notes in this deck. */
-  guidance?: string
-  /** Lists of `front|back` or `front|back|hint` lines, each with the tag its notes get. */
-  lists: { tag: string; text: string }[]
+/**
+ * `{ id, name, description?, learn?, native?, guidance?, notes: [{ front, back, hint?, tags? }] }`.
+ * `learn` and `native` make a language deck: the language learned and the language of the answers.
+ */
+export type DeckFile = { deck: Partial<Deck> & { id: string; name: string }; notes: NoteInput[] }
+
+const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
+
+/** The deck in a deck file, or why it is not one. */
+export const parseDeckFile = (source: string): DeckFile | { error: string } => {
+  let v: Record<string, unknown>
+  try {
+    v = JSON.parse(source) as Record<string, unknown>
+  } catch {
+    return { error: 'the file is not JSON' }
+  }
+  const id = text(v.id)?.toLowerCase()
+  const name = text(v.name)
+  if (!id || !/^[a-z0-9-]+$/.test(id)) return { error: 'the deck needs an "id" of lowercase letters, digits and hyphens' }
+  if (!name) return { error: 'the deck needs a "name"' }
+  if (!Array.isArray(v.notes)) return { error: 'the deck needs a "notes" list' }
+  const notes: NoteInput[] = []
+  for (const n of v.notes as Record<string, unknown>[]) {
+    const front = text(n?.front)
+    const back = text(n?.back)
+    if (!front || !back) continue
+    const tags = Array.isArray(n.tags) ? n.tags.filter((t): t is string => typeof t === 'string') : []
+    notes.push({ front, back, hint: text(n.hint), tags })
+  }
+  if (!notes.length) return { error: 'the deck has no notes with "front" and "back"' }
+  const learn = text(v.learn)
+  const native = text(v.native)
+  return {
+    deck: { id, name, learn, native, guidance: text(v.guidance), kinds: learn && native ? ['recognition', 'production'] : ['recognition'] },
+    notes,
+  }
 }
-
-/** `front|back` or `front|back|hint` lines; `#` lines and blanks are skipped. */
-export const parseList = (text: string, tag: string): NoteInput[] =>
-  text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line && !line.startsWith('#') && line.includes('|'))
-    .map(line => {
-      const [front = '', back = '', hint] = line.split('|').map(part => part.trim())
-      return hint ? { front, back, hint, tags: [tag] } : { front, back, tags: [tag] }
-    })
-
-/** Round-robin over the lists, so new cards mix kinds instead of 500 verbs in a row. */
-export const interleave = <T,>(lists: T[][]): T[] => {
-  const out: T[] = []
-  const longest = Math.max(0, ...lists.map(l => l.length))
-  for (let i = 0; i < longest; i++) for (const list of lists) if (i < list.length) out.push(list[i]!)
-  return out
-}
-
-/** The deck's notes in the order new cards come. */
-export const notesOf = (deck: BundledDeck) => interleave(deck.lists.map(l => parseList(l.text, l.tag)))

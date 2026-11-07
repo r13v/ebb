@@ -3,8 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { NewDeck, View } from '../types'
 import { formatDelay, scheduler, type Rating } from './fsrs'
-import { BUNDLED } from '../decks'
-import { notesOf, type BundledDeck } from './decks'
+import { parseDeckFile } from './decks'
 import { backTranslationPrompt, deckPrompt, flagMismatches, generationPrompt, parseDeckReply, parseNotes, questionPrompt } from './generate'
 import {
   addNotes,
@@ -149,49 +148,43 @@ const appendLog = async ($: $, entry: Partial<MonthLog>) => {
   await logWrite
 }
 
-// ---------- bundled decks ----------
-
-const deckOf = (m: BundledDeck): Partial<Deck> & { id: string; name: string } => ({
-  id: m.id,
-  name: m.name,
-  learn: m.learn,
-  native: m.native,
-  guidance: m.guidance,
-  isBundled: true,
-  kinds: m.learn ? ['recognition', 'production'] : ['recognition'],
-})
+// ---------- decks ----------
 
 /**
- * Adds to each bundled deck the person uses the notes a newer version of ebb brings.
- * A word that is in two lists gets the meanings of both. The file is written only on a change.
+ * `/ebb install <path or URL>`: adds a deck file. Installing it again adds the notes that are
+ * new and the meanings that are new; cards keep their schedule.
  */
-const syncBundled = async ($: $) => {
-  const data = await load($)
-  const used = BUNDLED.filter(b => data.decks[b.id]?.isBundled)
-  if (!used.length) return
-  const apply = (d: Data) => used.forEach(b => addNotes(d, b.id, notesOf(b), 'bundled', Date.now(), true))
-  const current = JSON.stringify(data)
-  const trial = JSON.parse(current) as Data
-  apply(trial)
-  if (JSON.stringify(trial) !== current) await mutate($, apply)
+const installDeck = async ($: $, where: string): Promise<string> => {
+  if (!where) return 'Name a deck file or URL: /ebb install ~/decks/spanish.json'
+  let source: string
+  if (/^https?:\/\//.test(where)) {
+    const r = await $.http.fetch(where)
+    if (!r.ok) return `Could not download the deck: HTTP ${r.status}`
+    source = r.text
+  } else {
+    const path = where.startsWith('~/') ? `${await homeDir($)}${where.slice(1)}` : where
+    if (!(await $.fs.exists(path))) return `No file ${path}`
+    source = await $.fs.read(path)
+  }
+  const file = parseDeckFile(source)
+  if ('error' in file) return `Not a deck: ${file.error}`
+  const added = await mutate($, d => {
+    ensureDeck(d, file.deck)
+    return addNotes(d, file.deck.id, file.notes, `install: ${where}`, Date.now(), true)
+  })
+  return `Installed ${file.deck.name}: ${added} new notes. Cards start showing in the spinner; review them with /ebb.`
 }
 
-const deckCommand = async ($: $, id: string): Promise<string> => {
+const listDecks = async ($: $): Promise<string> => {
   const data = await load($)
-  if (!id) {
-    const rows = BUNDLED.map(b => `${data.decks[b.id] ? '✓' : ' '} ${b.id} — ${b.name}. ${b.description}`)
-    const own = Object.values(data.decks)
-      .filter(d => !d.isBundled)
-      .map(d => `✓ ${d.id} — ${d.name}`)
-    return [...rows, ...own, '', 'Add one: /ebb deck <id>. Make your own: /ebb add <topic>.'].join('\n')
-  }
-  const chosen = BUNDLED.find(b => b.id === id)
-  if (!chosen) return `No deck "${id}". See /ebb deck.`
-  const added = await mutate($, d => {
-    ensureDeck(d, deckOf(chosen))
-    return addNotes(d, id, notesOf(chosen), 'bundled', Date.now(), true)
+  const now = Date.now()
+  const rows = Object.values(data.decks).map(d => {
+    const cards = Object.values(data.cards).filter(c => data.notes[c.note]?.deck === d.id)
+    const due = cards.filter(c => c.state !== 0 && c.due <= now).length
+    const fresh = cards.filter(c => c.state === 0).length
+    return `${d.id} — ${d.name}: ${cards.length} cards, ${due} due, ${fresh} new`
   })
-  return `Added ${chosen.name}: ${added} notes. Cards start showing in the spinner; review them with /ebb.`
+  return [...(rows.length ? rows : ['No deck yet.']), '', 'Make one: /ebb add <topic>. Install one: /ebb install <file or URL>.'].join('\n')
 }
 
 // ---------- spinner and end of turn ----------
@@ -215,7 +208,7 @@ const showNextCard = async ($: $) => {
       // No deck yet: say once, on a turn line, how to get one.
       if (!(await $.store.get('hinted'))) {
         await $.store.set('hinted', true)
-        pending = { hint: 'ebb: /ebb deck to pick a deck' }
+        pending = { hint: 'ebb: /ebb add <topic> or /ebb install <file or URL> to get cards' }
       }
       return
     }
@@ -384,7 +377,8 @@ const commitAdd = async ($: $) => {
 // ---------- commands ----------
 
 const HELP = `/ebb — review cards
-/ebb deck [id] — list the bundled decks, or add one
+/ebb decks — your decks
+/ebb install <file or URL> — add a deck file
 /ebb add [@deck] <topic or word list> — write new notes with Claude; a new @deck is made on first use
 /ebb pause [1h|30m|2d|off] — no cards in the spinner for a while
 /ebb stats — notes, due cards and new cards`
@@ -396,8 +390,10 @@ const runCommand = async ($: $, args: string): Promise<string | undefined> => {
     case '':
       await openStudy($)
       return undefined
-    case 'deck':
-      return deckCommand($, tail)
+    case 'decks':
+      return listDecks($)
+    case 'install':
+      return installDeck($, tail)
     case 'add':
       return tail ? startAdd($, tail) : 'Name a topic: /ebb add ordering at a bar'
     case 'pause': {
@@ -427,8 +423,7 @@ const runCommand = async ($: $, args: string): Promise<string | undefined> => {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
-    await $.command.register({ name: 'ebb', description: 'Spaced repetition: review, deck, add, pause, stats', argumentHint: '[deck | add <topic> | pause 1h | stats]' })
-    await syncBundled($).catch(error => $.ui.log(`ebb: deck update failed: ${String(error)}`, { to: 'debug' }))
+    await $.command.register({ name: 'ebb', description: 'Spaced repetition: review, add, install, decks, pause, stats', argumentHint: '[add <topic> | install <file or URL> | decks | pause 1h | stats]' })
     return started
   })
 
@@ -551,7 +546,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column" gap={1}>
           <Text bold>No deck yet.</Text>
-          <Text dimColor>Pick a bundled one with /ebb deck, or make your own with /ebb add &lt;topic&gt;.</Text>
+          <Text dimColor>Make one with /ebb add &lt;topic&gt;, or install a deck file with /ebb install &lt;file or URL&gt;.</Text>
         </Box>
       )
     }

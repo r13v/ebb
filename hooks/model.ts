@@ -22,8 +22,6 @@ export type Deck = {
   native?: string
   /** Extra instructions for `/ebb add` notes in this deck. */
   guidance?: string
-  /** True for a deck that comes with ebb: each session start adds the notes a newer version brings. */
-  isBundled?: boolean
 }
 
 export type Note = {
