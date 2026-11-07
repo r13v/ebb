@@ -1,6 +1,6 @@
 {
   "name": "ebb",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Spaced repetition in the background of Claude Code: a card in the spinner, its answer at the end of the turn, reviews in /ebb",
   "author": {
     "name": "r13v"
