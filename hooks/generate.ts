@@ -84,7 +84,13 @@ export const flagMismatches = (notes: NoteInput[], reply: string): Candidate[] =
   })
 }
 
-export const questionPrompt = (deck: Deck, ask: string, answer: string, hint: string | undefined, question: string) => ({
+export const questionPrompt = (
+  deck: Deck,
+  ask: string,
+  answer: string,
+  hint: string | undefined,
+  question: string,
+) => ({
   system: `You are a concise tutor inside a flashcard app. ${deck.learn && deck.native ? `The learner is a ${deck.native} speaker learning ${deck.learn}. Answer in ${deck.native}.` : `Deck: ${deck.name}. Answer in the language of the question.`} Use at most 6 short lines, plain text without markdown.`,
   prompt: `Card: ${ask} — ${answer}${hint ? ` (${hint})` : ''}\nQuestion: ${question}`,
 })
@@ -102,7 +108,13 @@ The language of the answers is the language the person writes in, in the request
 export const parseDeckReply = (text: string): DeckReply | undefined => {
   try {
     const v = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)) as Record<string, unknown>
-    const id = typeof v.id === 'string' ? v.id.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '') : ''
+    const id =
+      typeof v.id === 'string'
+        ? v.id
+            .toLowerCase()
+            .replace(/[^a-z0-9-]+/g, '-')
+            .replace(/^-|-$/g, '')
+        : ''
     if (!id) return undefined
     const text_ = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : null)
     return { id, name: text_(v.name) ?? id, learn: text_(v.learn), native: text_(v.native) }

@@ -20,7 +20,8 @@ export const parseDeckFile = (source: string): DeckFile | { error: string } => {
   }
   const id = text(v.id)?.toLowerCase()
   const name = text(v.name)
-  if (!id || !/^[a-z0-9-]+$/.test(id)) return { error: 'the deck needs an "id" of lowercase letters, digits and hyphens' }
+  if (!id || !/^[a-z0-9-]+$/.test(id))
+    return { error: 'the deck needs an "id" of lowercase letters, digits and hyphens' }
   if (!name) return { error: 'the deck needs a "name"' }
   if (!Array.isArray(v.notes)) return { error: 'the deck needs a "notes" list' }
   const notes: NoteInput[] = []
@@ -35,7 +36,14 @@ export const parseDeckFile = (source: string): DeckFile | { error: string } => {
   const learn = text(v.learn)
   const native = text(v.native)
   return {
-    deck: { id, name, learn, native, guidance: text(v.guidance), kinds: learn && native ? ['recognition', 'production'] : ['recognition'] },
+    deck: {
+      id,
+      name,
+      learn,
+      native,
+      guidance: text(v.guidance),
+      kinds: learn && native ? ['recognition', 'production'] : ['recognition'],
+    },
     notes,
   }
 }

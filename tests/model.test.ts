@@ -1,18 +1,38 @@
 import { expect, test } from 'claude-code/testing'
-
-import { flagMismatches, parseNotes } from '../hooks/generate'
 import { parseDeckFile } from '../hooks/decks'
-import { DAY, PASSIVE_SHOWS, addNotes, emptyData, ensureDeck, grade, newLeftToday, nextStudyCard, parseDuration, passiveKey, pickSpinnerCard, upgrade, type Data, type Passive } from '../hooks/model'
+import { flagMismatches, parseNotes } from '../hooks/generate'
+import {
+  addNotes,
+  DAY,
+  type Data,
+  emptyData,
+  ensureDeck,
+  grade,
+  newLeftToday,
+  nextStudyCard,
+  PASSIVE_SHOWS,
+  type Passive,
+  parseDuration,
+  passiveKey,
+  pickSpinnerCard,
+  upgrade,
+} from '../hooks/model'
 
 const seeded = (): Data => {
   const data = emptyData()
   ensureDeck(data, { id: 'es', name: 'Castellano' })
-  addNotes(data, 'es', [
-    { front: 'el corazón', back: 'сердце' },
-    { front: 'la mano', back: 'рука' },
-    { front: 'hablar', back: 'говорить' },
-    { front: 'Más vale pájaro en mano que ciento volando', back: 'лучше синица в руках' },
-  ], 'test', 0)
+  addNotes(
+    data,
+    'es',
+    [
+      { front: 'el corazón', back: 'сердце' },
+      { front: 'la mano', back: 'рука' },
+      { front: 'hablar', back: 'говорить' },
+      { front: 'Más vale pájaro en mano que ciento volando', back: 'лучше синица в руках' },
+    ],
+    'test',
+    0,
+  )
   return data
 }
 
@@ -79,19 +99,34 @@ test('a deck without production never unlocks it', async () => {
 })
 
 test('a deck file parses into a deck and its notes, or says what is wrong', async () => {
-  const file = parseDeckFile(JSON.stringify({ id: 'es', name: 'Spanish', learn: 'Spanish', native: 'English', notes: [{ front: 'el agua', back: 'water', hint: 'el, not la' }, { front: '', back: 'x' }] }))
+  const file = parseDeckFile(
+    JSON.stringify({
+      id: 'es',
+      name: 'Spanish',
+      learn: 'Spanish',
+      native: 'English',
+      notes: [
+        { front: 'el agua', back: 'water', hint: 'el, not la' },
+        { front: '', back: 'x' },
+      ],
+    }),
+  )
   if ('error' in file) throw new Error(file.error)
   expect(file.deck.kinds).toEqual(['recognition', 'production'])
   expect(file.notes).toEqual([{ front: 'el agua', back: 'water', hint: 'el, not la', tags: [] }])
   const facts = parseDeckFile(JSON.stringify({ id: 'k8s', name: 'Kubernetes', notes: [{ front: 'q', back: 'a' }] }))
   expect('error' in facts ? facts.error : facts.deck.kinds).toEqual(['recognition'])
   expect(parseDeckFile('not json')).toEqual({ error: 'the file is not JSON' })
-  expect(parseDeckFile(JSON.stringify({ id: 'Bad Id', name: 'x', notes: [] }))).toMatchObject({ error: expect.stringMatching(/id/) })
+  expect(parseDeckFile(JSON.stringify({ id: 'Bad Id', name: 'x', notes: [] }))).toMatchObject({
+    error: expect.stringMatching(/id/),
+  })
 })
 
 test('model replies: bad JSON is an error, a wrong back-translation is flagged', async () => {
   expect('error' in parseNotes('sorry, no')).toBe(true)
-  const parsed = parseNotes('```json\n{"notes":[{"front":"el mapa","back":"карта"},{"front":"la mano","back":"нога"}]}\n```')
+  const parsed = parseNotes(
+    '```json\n{"notes":[{"front":"el mapa","back":"карта"},{"front":"la mano","back":"нога"}]}\n```',
+  )
   if ('error' in parsed) throw new Error(parsed.error)
   const flagged = flagMismatches(parsed.notes, '{"fronts":["el mapa","la pierna"]}')
   expect(flagged[0]!.isChecked).toBe(true)
@@ -128,7 +163,13 @@ test('data from the first build keeps today’s count of new cards', async () =>
 test('the spinner moves on through new cards without any review', async () => {
   const data = emptyData()
   ensureDeck(data, { id: 'es', name: 'Castellano' })
-  addNotes(data, 'es', Array.from({ length: 20 }, (_, i) => ({ front: `palabra ${i}`, back: `слово ${i}` })), 'test', 0)
+  addNotes(
+    data,
+    'es',
+    Array.from({ length: 20 }, (_, i) => ({ front: `palabra ${i}`, back: `слово ${i}` })),
+    'test',
+    0,
+  )
   const passive: Passive = {}
   const shown = new Set<string>()
   let last: string | undefined
@@ -148,7 +189,8 @@ test('an overdue card gives way after its showings, and a review counts again', 
   const id = Object.keys(data.cards)[0]!
   data.cards[id] = { ...data.cards[id]!, state: 2, stability: 5, difficulty: 5, lastReview: 0, due: DAY }
   const passive: Passive = { [passiveKey(data.cards[id]!)]: PASSIVE_SHOWS }
-  for (let i = 0; i < 10; i++) expect(pickSpinnerCard(data, passive, 2 * DAY, undefined, Math.random)!.card.id).not.toBe(id)
+  for (let i = 0; i < 10; i++)
+    expect(pickSpinnerCard(data, passive, 2 * DAY, undefined, Math.random)!.card.id).not.toBe(id)
   grade(data, id, 3, 2 * DAY)
   data.cards[id]!.due = 2 * DAY
   expect(pickSpinnerCard(data, passive, 2 * DAY, undefined, () => 0)!.card.id).toBe(id)

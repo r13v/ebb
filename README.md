@@ -117,23 +117,14 @@ Each session writes only its own log file. A change to `data.json` takes a lock 
 
 ## Development
 
-Load the mod from a local checkout. Claude Code reloads it when a turn ends after a change:
+The tools and tasks are in `mise.toml`. Install [mise](https://mise.jdx.dev), then:
 
 ```sh
-claude --plugin-dir ~/Projects/ebb
+mise install      # Node.js, hk, the npm tools and the Git hook
+mise run dev      # a Claude Code session with the mod of this checkout
+mise run verify   # Biome, Knip, TypeScript, validation and the tests
 ```
 
-Build the site into `_site/` (GitHub Actions publishes it on a push to `main`):
+`mise run dev` loads the mod from the checkout; Claude Code reloads it when a turn ends after a change. It also writes `.claude-plugin/types/`, which `mise run typecheck` needs. `mise run site` builds the site into `_site/` (GitHub Actions publishes it on a push to `main`).
 
-```sh
-node site/build.mjs
-```
-
-Run the checks:
-
-```sh
-claude plugin validate ~/Projects/ebb
-claude plugin test ~/Projects/ebb
-```
-
-The FSRS tests use the test vectors of py-fsrs.
+The FSRS tests use the test vectors of py-fsrs. The rules for code and documents are in [AGENTS.md](AGENTS.md) and [docs/](docs).

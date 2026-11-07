@@ -1,5 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import { expect, mock, test } from 'claude-code/testing'
 
 const HOME = '/home/u'
 const DIR = `${HOME}/.claude/ebb`
@@ -89,7 +89,13 @@ const turn = async ($: any, n: number) => {
   const spinner = await $.ui.mount({ ...SPINNER, surface: 'terminal' })
   const word = (await spinner.find({ type: 'Text' }))?.text ?? ''
   await spinner.unmount()
-  const row = await $.ui.mount({ plugin: 'ebb', component: 'TurnDuration', requestId: `row-${n}`, surface: 'terminal', props: { word: 'Baked', durationMs: 1000 } })
+  const row = await $.ui.mount({
+    plugin: 'ebb',
+    component: 'TurnDuration',
+    requestId: `row-${n}`,
+    surface: 'terminal',
+    props: { word: 'Baked', durationMs: 1000 },
+  })
   const line: string = (await row.find({ type: 'Text' }))?.text ?? ''
   await row.unmount()
   await $.turn.complete({ turnId: `t${n}`, answer: '', durationMs: 1000, isAborted: false, reason: 'answer' } as never)
@@ -102,11 +108,29 @@ const typed = (text: string) => ({ text, origin: { kind: 'human' }, wait: false 
 /** A typed `/ebb <args>` as the prompt hands it. */
 const ebb = (args: string) => ({ command: 'ebb', args, origin: { kind: 'human' }, presentation: 'normal' }) as never
 
-const SPINNER = { plugin: 'ebb', component: 'Spinner', requestId: 'main', props: { word: 'Sauteing', message: null, suffix: '…', mode: 'thinking' } } as const
+const SPINNER = {
+  plugin: 'ebb',
+  component: 'Spinner',
+  requestId: 'main',
+  props: { word: 'Sauteing', message: null, suffix: '…', mode: 'thinking' },
+} as const
 
 /** A small Spanish deck file, as `/ebb install` reads it. */
-const deckFile = (notes: [string, string][] = [['el corazón', 'heart'], ['la mano', 'hand'], ['hablar', 'to speak'], ['¿Qué tal?', 'How are you?']]) =>
-  JSON.stringify({ id: 'es', name: 'Spanish', learn: 'Spanish', native: 'English', notes: notes.map(([front, back]) => ({ front, back })) })
+const deckFile = (
+  notes: [string, string][] = [
+    ['el corazón', 'heart'],
+    ['la mano', 'hand'],
+    ['hablar', 'to speak'],
+    ['¿Qué tal?', 'How are you?'],
+  ],
+) =>
+  JSON.stringify({
+    id: 'es',
+    name: 'Spanish',
+    learn: 'Spanish',
+    native: 'English',
+    notes: notes.map(([front, back]) => ({ front, back })),
+  })
 
 /** Starts a session with a deck installed from a file. */
 const withDeck = async ($: any, fs: ReturnType<typeof disk>) => {
@@ -115,12 +139,39 @@ const withDeck = async ($: any, fs: ReturnType<typeof disk>) => {
   return $.command.run(ebb('install ~/decks/es.json'))
 }
 
-const PANE = { plugin: 'ebb', component: 'Pane', requestId: 'ebb', surface: 'terminal', props: { title: 'ebb', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} } } as const
+const PANE = {
+  plugin: 'ebb',
+  component: 'Pane',
+  requestId: 'ebb',
+  surface: 'terminal',
+  props: {
+    title: 'ebb',
+    isFocused: true,
+    bodyColumns: 80,
+    placement: 'dock',
+    scroll: { offset: 0, bodyRows: 20 },
+    view: {},
+  },
+} as const
 
 test('/ebb install adds a deck from a file or a URL, and again only what is new', async ($, on) => {
   engine(on)
-  on('http.fetch', (_, e) =>
-    ({ value: e.url.endsWith('/es.json') ? { status: 200, ok: true, headers: {}, text: deckFile([['el corazón', 'heart'], ['la casa', 'house']]) } : { status: 404, ok: false, headers: {}, text: '' } }) as never,
+  on(
+    'http.fetch',
+    (_, e) =>
+      ({
+        value: e.url.endsWith('/es.json')
+          ? {
+              status: 200,
+              ok: true,
+              headers: {},
+              text: deckFile([
+                ['el corazón', 'heart'],
+                ['la casa', 'house'],
+              ]),
+            }
+          : { status: 404, ok: false, headers: {}, text: '' },
+      }) as never,
   )
   const fs = disk(on)
   expect((await withDeck($, fs)).text).toMatch(/Installed Spanish: 4 new notes/)
@@ -159,7 +210,13 @@ test('a turn puts a card in the spinner and its answer on the turn line', async 
   const shown = (Object.values(fs.data().notes) as { front: string; back: string }[]).find(n => word === n.front)
   expect(shown).toBeDefined()
 
-  const line = await $.ui.mount({ plugin: 'ebb', component: 'TurnDuration', requestId: 'row-1', surface: 'terminal', props: { word: 'Baked', durationMs: 3000 } })
+  const line = await $.ui.mount({
+    plugin: 'ebb',
+    component: 'TurnDuration',
+    requestId: 'row-1',
+    surface: 'terminal',
+    props: { word: 'Baked', durationMs: 3000 },
+  })
   const text = (await line.find({ type: 'Text' }))?.text ?? ''
   expect(text).toContain(`${shown!.front} — ${shown!.back}`)
   expect(text).toContain('Baked for 3s')
@@ -260,9 +317,11 @@ const replies = (on: On, ...texts: (string | null)[]) => {
   let call = 0
   on('model.complete', () => {
     const text = texts[call++]
-    return (text === null || text === undefined
-      ? { value: { isAnswered: false, reason: 'api-error', status: 529, error: {}, usage: {} } }
-      : { value: { isAnswered: true, text, usage: {} } }) as never
+    return (
+      text === null || text === undefined
+        ? { value: { isAnswered: false, reason: 'api-error', status: 529, error: {}, usage: {} } }
+        : { value: { isAnswered: true, text, usage: {} } }
+    ) as never
   })
 }
 
@@ -272,7 +331,11 @@ const waitForList = async (ui: any) => {
 
 test('/ebb add flags a bad back-translation and adds only ticked notes', async ($, on) => {
   engine(on)
-  replies(on, '{"notes":[{"front":"el chiringuito","back":"пляжный бар"},{"front":"la caña","back":"бокал пива"}]}', '{"fronts":["el chiringuito","la cerveza"]}')
+  replies(
+    on,
+    '{"notes":[{"front":"el chiringuito","back":"пляжный бар"},{"front":"la caña","back":"бокал пива"}]}',
+    '{"fronts":["el chiringuito","la cerveza"]}',
+  )
   const fs = disk(on)
   await withDeck($, fs)
   await $.command.run(ebb('add бар'))
@@ -301,7 +364,12 @@ test('/ebb add with a failed back-translation ticks nothing and says so', async 
 
 test('a first /ebb add takes the languages from the request and makes a language deck', async ($, on) => {
   engine(on)
-  replies(on, '{"id":"italian","name":"Italian","learn":"Italian","native":"Russian"}', '{"notes":[{"front":"il gatto","back":"кот"}]}', '{"fronts":["il gatto"]}')
+  replies(
+    on,
+    '{"id":"italian","name":"Italian","learn":"Italian","native":"Russian"}',
+    '{"notes":[{"front":"il gatto","back":"кот"}]}',
+    '{"fronts":["il gatto"]}',
+  )
   const fs = disk(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.command.run(ebb('add итальянские животные'))
@@ -315,7 +383,12 @@ test('a first /ebb add takes the languages from the request and makes a language
 
 test('when the person’s language is unclear, the pane asks once', async ($, on) => {
   engine(on)
-  replies(on, '{"id":"spanish","name":"Spanish","learn":"Spanish","native":null}', '{"notes":[{"front":"el perro","back":"dog"}]}', '{"fronts":["el perro"]}')
+  replies(
+    on,
+    '{"id":"spanish","name":"Spanish","learn":"Spanish","native":null}',
+    '{"notes":[{"front":"el perro","back":"dog"}]}',
+    '{"fronts":["el perro"]}',
+  )
   const fs = disk(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.command.run(ebb('add spanish animals'))
@@ -330,7 +403,11 @@ test('when the person’s language is unclear, the pane asks once', async ($, on
 
 test('a cancelled first /ebb add leaves no deck behind', async ($, on) => {
   engine(on)
-  replies(on, '{"id":"k8s","name":"Kubernetes","learn":null,"native":null}', '{"notes":[{"front":"What restarts a crashed pod?","back":"its controller"}]}')
+  replies(
+    on,
+    '{"id":"k8s","name":"Kubernetes","learn":null,"native":null}',
+    '{"notes":[{"front":"What restarts a crashed pod?","back":"its controller"}]}',
+  )
   const fs = disk(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.command.run(ebb('add @k8s pods'))
@@ -343,7 +420,11 @@ test('a cancelled first /ebb add leaves no deck behind', async ($, on) => {
 
 test('/ebb add @deck makes a deck of facts that asks one way', async ($, on) => {
   engine(on)
-  replies(on, '{"id":"k8s","name":"Kubernetes","learn":null,"native":null}', '{"notes":[{"front":"What restarts a crashed pod?","back":"its controller"}]}')
+  replies(
+    on,
+    '{"id":"k8s","name":"Kubernetes","learn":null,"native":null}',
+    '{"notes":[{"front":"What restarts a crashed pod?","back":"its controller"}]}',
+  )
   const fs = disk(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.command.run(ebb('add @k8s pods'))

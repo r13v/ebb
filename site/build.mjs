@@ -1,14 +1,15 @@
 // Builds the GitHub Pages site into _site/: one page that lists every deck in decks/
 // with a button that copies its install command. Run: node site/build.mjs
 
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname
 const out = join(root, '_site')
 mkdirSync(join(out, 'decks'), { recursive: true })
 
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+const esc = s =>
+  String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
 const decks = readdirSync(join(root, 'decks'))
   .filter(f => f.endsWith('.json'))
@@ -20,7 +21,12 @@ const decks = readdirSync(join(root, 'decks'))
   })
 
 // Words for the spinner demo: short fronts from every deck.
-const demo = decks.flatMap(d => d.notes.filter(n => n.front.length <= 22).slice(0, 40).map(n => [n.front, n.back.split(';')[0].trim()]))
+const demo = decks.flatMap(d =>
+  d.notes
+    .filter(n => n.front.length <= 22)
+    .slice(0, 40)
+    .map(n => [n.front, n.back.split(';')[0].trim()]),
+)
 
 const deckCard = d => `
       <article class="deck">

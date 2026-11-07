@@ -1,0 +1,70 @@
+# Tools, tasks and the Git hook of the repository. `mise tasks` lists the tasks, `mise run <task>` runs one.
+
+[settings]
+# The npm dependency provider below is experimental.
+experimental = true
+lockfile = true
+
+[tools]
+# The site build and the dev tools; the mod itself runs inside Claude Code, without Node.
+node = "26.13.0"
+# The pre-commit hook runner; its steps are in hk.pkl, which pins the same version.
+hk = "2.11.1"
+
+[env]
+_.path = ["{{config_root}}/node_modules/.bin"]
+
+# Reinstalls the locked tree when package-lock.json or package.json changed.
+[deps.npm]
+run = "npm ci"
+auto = true
+
+[tasks.dev]
+description = "A Claude Code session with the mod of this checkout; it reloads the mod after a turn that changed it"
+run = "claude --plugin-dir {{config_root}}"
+
+[tasks.test]
+description = "The mod tests in the engine's environment"
+run = "claude plugin test {{config_root}}"
+
+[tasks.validate]
+description = "The manifest and what the engine would refuse in the hooks module"
+run = "claude plugin validate {{config_root}}"
+
+# The engine writes .claude-plugin/types/ when it loads the mod. Until one `mise run dev` the check
+# only warns, so a fresh checkout can still commit.
+[tasks.typecheck]
+run = """
+if [ ! -d .claude-plugin/types ]; then
+  echo "typecheck skipped: no .claude-plugin/types/ yet; load the mod once with 'mise run dev'." >&2
+  exit 0
+fi
+tsc --noEmit -p .
+"""
+
+[tasks.check]
+description = "Biome over the whole checkout"
+run = "biome check ."
+
+[tasks."check:fix"]
+run = "biome check --write ."
+
+[tasks.knip]
+description = "Unused files, exports and dependencies"
+run = "knip"
+
+[tasks.site]
+description = "The GitHub Pages site into _site/"
+run = "node site/build.mjs"
+
+[tasks.verify]
+description = "Biome, Knip, TypeScript, validation and the tests"
+run = [{ tasks = ["check", "knip", "typecheck", "validate", "test"] }]
+
+[tasks.pre-commit]
+description = "The checks the Git hook runs; steps in hk.pkl"
+run = "hk run pre-commit"
+
+[hooks]
+# Every checkout gets the Git hook after `mise install`; `--mise` resolves hk and the tools through mise.
+postinstall = "hk install --mise"

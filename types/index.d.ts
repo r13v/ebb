@@ -14,7 +14,15 @@ export type NewDeck = { id: string; name: string; learn?: string; native?: strin
 
 /** What the study pane shows. */
 export type View =
-  | { mode: 'study'; cardId: string | null; isRevealed: boolean; shownAt: number; isAsking: boolean; reply?: string; note?: string }
+  | {
+      mode: 'study'
+      cardId: string | null
+      isRevealed: boolean
+      shownAt: number
+      isAsking: boolean
+      reply?: string
+      note?: string
+    }
   | { mode: 'add'; deck: string; topic: string; candidates: Candidate[]; status?: string; newDeck?: NewDeck }
 
 declare module 'claude-code' {

@@ -1,0 +1,33 @@
+/// The pre-commit checks. hk runs them in parallel; `mise run verify` is the full suite.
+amends "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Builtins.pkl"
+
+local checks = new Mapping<String, Step> {
+  ["biome"] = (Builtins.biome) {
+    glob = List("**/*.js", "**/*.mjs", "**/*.ts", "**/*.tsx", "**/*.json", "**/*.jsonc")
+    check = "biome check --no-errors-on-unmatched --files-ignore-unknown=true {{files}}"
+  }
+  // Neither Biome nor tsc sees an unused export or a dependency nothing imports.
+  ["knip"] = Builtins.knip
+  // Biome does not check types. The engine writes the types the check needs (`mise run typecheck`).
+  ["tsc"] {
+    glob = List("hooks/**/*.ts", "hooks/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "types/**/*.ts")
+    check = "mise run typecheck"
+  }
+  // The engine refuses a hooks module that validation rejects.
+  ["validate"] {
+    glob = List("hooks/**", "types/**", ".claude-plugin/**")
+    check = "claude plugin validate ."
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = false
+    stash = "none"
+    steps = checks
+  }
+  ["check"] {
+    steps = checks
+  }
+}

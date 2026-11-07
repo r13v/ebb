@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { formatDelay, newSchedule, scheduler, type Rating } from '../hooks/fsrs'
+import { formatDelay, newSchedule, type Rating, scheduler } from '../hooks/fsrs'
 
 const DAY = 86_400_000
 const START = Date.UTC(2022, 10, 29, 12, 30)
@@ -51,11 +51,19 @@ test('learning steps: Again 1m, Good 10m, then graduation', async () => {
 })
 
 test('fuzz keeps a review interval near the unfuzzed one', async () => {
-  const plain = scheduler().review({ ...newSchedule(0), state: 2, stability: 30, difficulty: 5, lastReview: 0 }, 3, 30 * DAY)
-  const fuzzed = scheduler({ random: () => 0.99 }).review({ ...newSchedule(0), state: 2, stability: 30, difficulty: 5, lastReview: 0 }, 3, 30 * DAY)
+  const plain = scheduler().review(
+    { ...newSchedule(0), state: 2, stability: 30, difficulty: 5, lastReview: 0 },
+    3,
+    30 * DAY,
+  )
+  const fuzzed = scheduler({ random: () => 0.99 }).review(
+    { ...newSchedule(0), state: 2, stability: 30, difficulty: 5, lastReview: 0 },
+    3,
+    30 * DAY,
+  )
   const gap = Math.abs(plain.due - fuzzed.due) / DAY
   expect(gap).toBeGreaterThan(0)
-  expect(gap).toBeLessThan(plain.due / DAY * 0.1)
+  expect(gap).toBeLessThan((plain.due / DAY) * 0.1)
 })
 
 test('delays read short', async () => {

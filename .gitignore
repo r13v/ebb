@@ -1,3 +1,8 @@
 .claude-plugin/types/
 .DS_Store
 _site/
+node_modules/
+# Personal mise and hk overrides.
+mise.local.toml
+mise.local.lock
+hk.local.pkl
