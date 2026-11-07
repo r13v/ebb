@@ -25,5 +25,5 @@ All data is in `~/.claude/ebb/`; `README.md` § Data lists the files.
 
 ## Release and site
 
-- `.github/workflows/release.yml` bumps the version in `.claude-plugin/plugin.json` and tags it after `.github/workflows/check.yml` passes on a push to `main` that changed the mod. Without a new version, `claude plugin update` does not see the change. CI installs the Claude Code version that `check.yml` pins; update it there together with a change that needs a newer engine.
+- `.github/workflows/release.yml` bumps the version in `.claude-plugin/plugin.json` and tags it after `.github/workflows/check.yml` passes on a push to `main` that changed the mod. Without a new version, `claude plugin update` does not see the change. CI installs the latest Claude Code, so a red Check with no change of the mod means the engine changed.
 - `.github/workflows/pages.yml` builds `site/build.mjs` into `_site/` when `decks/` or `site/` changes. A deck file in `decks/` is public: the site serves it for `/ebb install`.
