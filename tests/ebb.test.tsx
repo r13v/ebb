@@ -196,7 +196,7 @@ test('without a deck the band says how to get one', async ($, on) => {
   await ui.unmount()
 })
 
-test('the band shows a card, reveals it, grades once on a double press and moves on', async ($, on) => {
+test('Forgot grades once on a double press and shows the answer until Next', async ($, on) => {
   engine(on)
   const fs = disk(on)
   await withDeck($, fs)
@@ -207,15 +207,31 @@ test('the band shows a card, reveals it, grades once on a double press and moves
   expect(note).toBeDefined()
   expect(await shown(ui)).not.toContain(note.back)
 
-  await ui.press({ key: 'show' })
-  expect(await shown(ui)).toContain(note.back)
   await Promise.all([ui.press({ key: 'g1' }), ui.press({ key: 'g1' })])
-
   const cards = Object.values(fs.data().cards) as { reps: number }[]
   expect(cards.reduce((n, c) => n + c.reps, 0)).toBe(1)
   const log = [...fs.files.entries()].find(([p]) => p.includes('/log/'))!
   expect(JSON.parse(log[1].text).reviews).toHaveLength(1)
+  expect(await front(ui)).toBe(first)
+  expect(await shown(ui)).toContain(note.back)
+
+  await ui.press({ key: 'next' })
   expect(await front(ui)).not.toBe(first)
+  await ui.unmount()
+})
+
+test('Got it grades and brings the next card without the answer', async ($, on) => {
+  engine(on)
+  const fs = disk(on)
+  await withDeck($, fs)
+  const ui = await $.ui.mount(BAND)
+  const first = await front(ui)
+  const note = (Object.values(fs.data().notes) as { front: string; back: string }[]).find(n => n.front === first)!
+  await ui.press({ key: 'g3' })
+  const cards = Object.values(fs.data().cards) as { reps: number }[]
+  expect(cards.reduce((n, c) => n + c.reps, 0)).toBe(1)
+  expect(await front(ui)).not.toBe(first)
+  expect(await shown(ui)).not.toContain(note.back)
   await ui.unmount()
 })
 
@@ -234,8 +250,9 @@ test('a graded card never comes straight back, also in a deck of two', async ($,
   const ui = await $.ui.mount(BAND)
   let last = await front(ui)
   for (let n = 0; n < 6; n++) {
-    await ui.press({ key: 'show' })
-    await ui.press({ key: n % 2 ? 'g3' : 'g1' })
+    const isForgot = n % 2 === 0
+    await ui.press({ key: isForgot ? 'g1' : 'g3' })
+    if (isForgot) await ui.press({ key: 'next' })
     const next = await front(ui)
     expect(next).not.toBe(last)
     last = next
@@ -261,19 +278,17 @@ test('the band alternates new cards with due ones', async ($, on) => {
     grade(data, id, 3, now - 10 * 86_400_000)
     data.cards[id]!.due = now - 1000
   }
-  const fs = disk(on, { [`${DIR}/data.json`]: JSON.stringify(data) })
+  disk(on, { [`${DIR}/data.json`]: JSON.stringify(data) })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount(BAND)
   const shownWords: string[] = []
   for (let n = 0; n < 4; n++) {
     shownWords.push((await front(ui))!)
-    await ui.press({ key: 'show' })
     await ui.press({ key: 'g3' })
   }
   await ui.unmount()
   const isNewWord = (w: string) => words.indexOf(w) >= 3
   expect(shownWords.map(isNewWord)).toEqual([true, false, true, false])
-  expect(fs.files.has(`${DIR}/data.json`)).toBe(true)
 })
 
 test('skip shows another card and changes no schedule', async ($, on) => {

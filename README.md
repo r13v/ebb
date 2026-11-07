@@ -4,8 +4,8 @@ ebb is a Claude Code mod for spaced repetition. It teaches you words, phrases or
 
 Site and decks: <https://r13v.github.io/ebb/>
 
-- A band above the prompt shows one card: `el corazón  │  r: Show  s: Skip`.
-- Show the answer, then grade the card: `el corazón — heart  │  f: Forgot 1m  g: Got it 10m`. A hint of the note, if it has one, follows the answer. The next card comes at once.
+- A band above the prompt shows one card: `el corazón  │  f: Forgot 1m  g: Got it 10m  s: Skip`.
+- Got it brings the next card at once. Forgot shows the answer, with the note's hint if it has one: `el corazón — heart  │  f: Next`.
 - You can do it while Claude works, or ignore the band. The `🌊 ebb` button under the prompt hides the band and shows it again. ebb never interrupts you.
 
 The scheduler is FSRS-6, the algorithm that Anki uses.
@@ -80,8 +80,9 @@ A deck file is JSON:
 In the band above the prompt:
 
 - Click a button, or press `ctrl+x tab` to move the keys to the band and then press its key.
-- Press `r` to show the answer, or `s` to skip the card. A skipped card comes back when no other card is left.
 - Press `f` (Forgot) or `g` (Got it) to grade the card. Each button shows its key and when the card comes back.
+- After Forgot, the band shows the answer; press `f` (Next) for the next card.
+- Press `s` to skip the card. A skipped card comes back when no other card is left.
 - Press Escape to return to the prompt.
 - Click `🌊 ebb` under the prompt to hide or show the band. It stays as you left it in new sessions.
 
@@ -99,7 +100,7 @@ In the pane of `/ebb add`:
 - A card you just graded or skipped never comes straight back while another card is left. A learning card waits for its step.
 - Learning steps are 1 minute and 10 minutes. The relearning step is 10 minutes.
 - When nothing is scheduled, the band runs ahead: new cards past the daily limit, then the card that comes due soonest. So it always has a card.
-- Only a grade changes a schedule. Showing or skipping a card does not.
+- Only a grade changes a schedule. Skipping a card does not.
 - At the end of each turn, a card whose answer is hidden makes way for a card that came due.
 - When a deck file has the same front twice, the note gets the meanings of both: `mejor` is `лучший; лучше`.
 
@@ -122,7 +123,7 @@ The tools and tasks are in `mise.toml`. Install [mise](https://mise.jdx.dev), th
 mise install      # Node.js, hk, the npm tools and the Git hook
 mise run dev      # a Claude Code session with the mod of this checkout
 mise run verify   # Biome, Knip, TypeScript, validation and the tests
-mise run live     # inside agterm: a real session with the mod, its band before and after Show
+mise run live     # inside agterm: a real session with the mod, its band with a card
 ```
 
 `mise run dev` loads the mod from the checkout; Claude Code reloads it when a turn ends after a change. It also writes `.claude-plugin/types/`, which `mise run typecheck` needs. `mise run site` builds the site into `_site/` (GitHub Actions publishes it on a push to `main`).

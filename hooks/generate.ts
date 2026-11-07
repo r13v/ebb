@@ -63,16 +63,16 @@ const normalize = (s: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
-/** Flags the notes whose back-translation does not land on the front. A missing reply flags nothing. */
-export const flagMismatches = (notes: NoteInput[], reply: string): Candidate[] => {
-  let fronts: unknown[] = []
+/** Flags the notes whose back-translation does not land on the front; undefined when the reply has no fronts. */
+export const flagMismatches = (notes: NoteInput[], reply: string): Candidate[] | undefined => {
+  let fronts: unknown
   try {
-    const start = reply.indexOf('{')
-    const parsed = JSON.parse(reply.slice(start, reply.lastIndexOf('}') + 1)) as { fronts?: unknown }
-    if (Array.isArray(parsed.fronts)) fronts = parsed.fronts
+    fronts = (JSON.parse(reply.slice(reply.indexOf('{'), reply.lastIndexOf('}') + 1)) as { fronts?: unknown }).fronts
   } catch {
-    // no check is possible; the user still sees every note
+    return undefined
   }
+  if (!Array.isArray(fronts)) return undefined
+
   return notes.map((note, i) => {
     const back = fronts[i]
     if (typeof back !== 'string') return { ...note, isChecked: true }

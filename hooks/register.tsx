@@ -231,8 +231,6 @@ const showNextCard = async ($: $, previous?: string, isRepick = false) => {
   }
 }
 
-const reveal = ($: $) => update($, band, old => ({ ...old, isRevealed: true }))
-
 const skip = async ($: $) => {
   const { cardId } = await read($, band)
   if (cardId) skipped.add(cardId)
@@ -243,14 +241,16 @@ let isGrading = false
 
 const gradeCurrent = async ($: $, rating: Rating) => {
   const b = await read($, band)
-  if (isGrading || !b.cardId || !b.isRevealed) return
+  if (isGrading || !b.cardId || b.isRevealed) return
   isGrading = true // a second press while this one saves is ignored
   const cardId = b.cardId
   try {
     const graded = await mutate($, data => grade(data, cardId, rating, Date.now(), Math.random, Date.now() - b.shownAt))
     await appendLog($, graded.log)
     skipped.delete(cardId)
-    await showNextCard($, cardId)
+    // A forgotten card shows its answer until Next; a recalled one makes way at once.
+    if (rating === 1) await update($, band, old => ({ ...old, isRevealed: true }))
+    else await showNextCard($, cardId)
   } catch (error) {
     $.ui.toast(`ebb: the grade was not saved: ${String(error)}`)
   } finally {
@@ -282,23 +282,29 @@ const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve
   const f = card && face(data, card)
   if ((data.meta.pausedUntil ?? 0) > now || !f) return undefined
 
-  if (!b.isRevealed)
+  if (b.isRevealed)
     return (
       <Box gap={2} flexWrap="wrap">
-        <Text bold>{f.ask}</Text>
+        <Text>
+          <Text bold>{f.ask}</Text> — {f.answer}
+          {f.hint && <Text dimColor> ({f.hint})</Text>}
+        </Text>
         <Text dimColor>│</Text>
-        <Button key="show" hotkey="r" plain variant="primary" label="Show" onPress={() => void reveal($)} />
-        <Button key="skip" hotkey="s" plain label="Skip" onPress={() => void skip($)} />
+        <Button
+          key="next"
+          hotkey="f"
+          plain
+          variant="primary"
+          label="Next"
+          onPress={() => void showNextCard($, f.card.id)}
+        />
       </Box>
     )
 
   const intervals = scheduler().preview(f.card, now)
   return (
     <Box gap={2} flexWrap="wrap">
-      <Text>
-        <Text bold>{f.ask}</Text> — {f.answer}
-        {f.hint && <Text dimColor> ({f.hint})</Text>}
-      </Text>
+      <Text bold>{f.ask}</Text>
       <Text dimColor>│</Text>
       {intervals.map(({ rating, due }) => {
         const grade = GRADES[rating]
@@ -314,6 +320,7 @@ const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve
           )
         )
       })}
+      <Button key="skip" hotkey="s" plain label="Skip" onPress={() => void skip($)} />
     </Box>
   )
 }
@@ -357,12 +364,10 @@ const generate = async ($: $, deck: Deck | NewDeck, topic: string) => {
       maxTokens: 1500,
       timeoutMs: 60_000,
     })
-    candidates = flagMismatches(notes, checked.isAnswered ? checked.text : '')
-    if (!checked.isAnswered) {
-      // Without a back-translation nothing is checked: every note starts unticked, and the status says why.
-      candidates = candidates.map(c => ({ ...c, isChecked: false }))
-      status = 'The back-translation failed: check the notes yourself and tick the good ones'
-    }
+    const flagged = checked.isAnswered ? flagMismatches(notes, checked.text) : undefined
+    // Without a back-translation nothing is checked: every note starts unticked, and the status says why.
+    candidates = flagged ?? notes.map(n => ({ ...n, isChecked: false }))
+    if (!flagged) status = 'The back-translation failed: check the notes yourself and tick the good ones'
   }
   candidates = candidates.map(c =>
     known.has(c.front.toLowerCase()) ? { ...c, isDuplicate: true, isChecked: false } : c,
@@ -558,7 +563,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {rest}
-        {card}
+        <Box marginTop={1}>{card}</Box>
       </Box>
     )
   })

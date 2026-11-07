@@ -28,13 +28,13 @@ _Avoid_: Reverse card
 **Review**: A graded answer to a card in the band: Forgot (FSRS Again) or Got it (FSRS Good). Only reviews change the schedule.
 _Avoid_: Practice
 
-**Band**: The line above the prompt that shows one card at a time, where the user reveals, grades or skips it.
+**Band**: The line above the prompt that shows one card at a time, where the user grades or skips it.
 _Avoid_: Study pane, study session, widget
 
 **Skip**: Putting the card in the band aside for this session without a review; it comes back when no other card is left.
 _Avoid_: Bury, postpone
 
-**Reveal**: Showing the answer side of the card in the band, on the user's request.
+**Reveal**: Showing the answer side of the card in the band after the user grades it Forgot; Next takes the band to the next card.
 _Avoid_: Flip
 
 **Due card**: A card whose scheduled time has come.

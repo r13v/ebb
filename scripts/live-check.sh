@@ -1,6 +1,6 @@
 #!/bin/sh
 # Starts a Claude Code session with the mod of this checkout in an agterm companion pane,
-# prints the band, reveals the card and prints it again. It never grades: the data is real.
+# and prints the band with its card. It never grades, so it cannot show the answer: the data is real.
 set -eu
 
 if [ -z "${AGTERM_SOCKET:-}" ] || [ -z "${AGTERM_SESSION_ID:-}" ]; then
@@ -17,7 +17,6 @@ trap 'ctl session close --target "$id" >/dev/null' EXIT
 
 # The band and the footer: the lines above and below the prompt.
 screen() { ctl session text --target "$id" | grep -v '^[[:space:]]*$' | tail -6; }
-type() { ctl session type --target "$id" "$1" >/dev/null; sleep 1; }
 
 # The footer button shows once the mod has loaded.
 for _ in $(seq 30); do
@@ -28,8 +27,3 @@ sleep 2
 
 echo '== the card'
 screen
-type "$(printf '\030\t')" # ctrl+x tab: the keys go to the band
-type r
-echo '== revealed'
-screen
-type "$(printf '\033')"

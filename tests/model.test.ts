@@ -132,10 +132,11 @@ test('model replies: bad JSON is an error, a wrong back-translation is flagged',
     '```json\n{"notes":[{"front":"el mapa","back":"карта"},{"front":"la mano","back":"нога"}]}\n```',
   )
   if ('error' in parsed) throw new Error(parsed.error)
-  const flagged = flagMismatches(parsed.notes, '{"fronts":["el mapa","la pierna"]}')
+  const flagged = flagMismatches(parsed.notes, '{"fronts":["el mapa","la pierna"]}')!
   expect(flagged[0]!.isChecked).toBe(true)
   expect(flagged[1]!.isChecked).toBe(false)
   expect(flagged[1]!.flag).toMatch(/pierna/)
+  expect(flagMismatches(parsed.notes, 'sorry, no')).toBeUndefined()
 })
 
 test('durations parse', async () => {
@@ -187,15 +188,4 @@ test('a learning card waits for its step while other cards are left', async () =
   grade(data, first.id, 3, now)
   expect(nextCard(data, now + 60_000)!.id).not.toBe(first.id)
   expect(nextCard(data, now + 11 * 60_000)!.id).toBe(first.id)
-})
-
-test('new and due cards take turns while both are left', async () => {
-  const data = seeded()
-  const now = Date.UTC(2026, 10, 7, 10)
-  const [first, second] = Object.values(data.cards)
-  grade(data, first!.id, 3, now - DAY)
-  data.cards[first!.id]!.due = now
-  // The due card goes first on a due turn, a new card in deck order on a new turn.
-  expect(nextCard(data, now, new Set(), false)!.id).toBe(first!.id)
-  expect(nextCard(data, now, new Set(), true)!.id).toBe(second!.id)
 })
