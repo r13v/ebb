@@ -258,7 +258,12 @@ const gradeCurrent = async ($: $, rating: Rating) => {
   }
 }
 
-const GRADE_LABELS = ['Again', 'Hard', 'Good', 'Easy']
+// Two grades, Again and Good: whether the person recalled the card is what FSRS needs most.
+// Letters, not digits: a bare digit in an empty prompt presses a band Button, and the band never takes the prompt's keys.
+const GRADES: Partial<Record<Rating, { hotkey: string; label: string }>> = {
+  1: { hotkey: 'f', label: 'Forgot' },
+  3: { hotkey: 'g', label: 'Got it' },
+}
 
 /** The card in the band, or nothing while the cards are paused or none is chosen. */
 const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve']>) => {
@@ -281,8 +286,9 @@ const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve
     return (
       <Box gap={2} flexWrap="wrap">
         <Text bold>{f.ask}</Text>
-        <Button key="show" hotkey="r" variant="primary" label="Show" onPress={() => void reveal($)} />
-        <Button key="skip" hotkey="s" label="Skip" onPress={() => void skip($)} />
+        <Text dimColor>│</Text>
+        <Button key="show" hotkey="r" plain variant="primary" label="Show" onPress={() => void reveal($)} />
+        <Button key="skip" hotkey="s" plain label="Skip" onPress={() => void skip($)} />
       </Box>
     )
 
@@ -293,14 +299,21 @@ const cardTree = async ($: $, { Box, Text, Button }: ReturnType<$['ui']['resolve
         <Text bold>{f.ask}</Text> — {f.answer}
         {f.hint && <Text dimColor> ({f.hint})</Text>}
       </Text>
-      {intervals.map(({ rating, due }, i) => (
-        <Button
-          key={`g${rating}`}
-          hotkey={String(rating)}
-          label={`${GRADE_LABELS[i]} ${formatDelay(due - now)}`}
-          onPress={() => void gradeCurrent($, rating)}
-        />
-      ))}
+      <Text dimColor>│</Text>
+      {intervals.map(({ rating, due }) => {
+        const grade = GRADES[rating]
+        return (
+          grade && (
+            <Button
+              key={`g${rating}`}
+              hotkey={grade.hotkey}
+              plain
+              label={`${grade.label} ${formatDelay(due - now)}`}
+              onPress={() => void gradeCurrent($, rating)}
+            />
+          )
+        )
+      })}
     </Box>
   )
 }

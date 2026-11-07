@@ -25,7 +25,7 @@ _Avoid_: Forward card
 **Production card**: The card that shows the meaning and asks for the target-language side with its article (RU→ES). It unlocks when the recognition card is stable enough.
 _Avoid_: Reverse card
 
-**Review**: A graded answer to a card (Again, Hard, Good or Easy) in the band. Only reviews change the schedule.
+**Review**: A graded answer to a card in the band: Forgot (FSRS Again) or Got it (FSRS Good). Only reviews change the schedule.
 _Avoid_: Practice
 
 **Band**: The line above the prompt that shows one card at a time, where the user reveals, grades or skips it.

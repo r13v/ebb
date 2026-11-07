@@ -4,8 +4,8 @@ ebb is a Claude Code mod for spaced repetition. It teaches you words, phrases or
 
 Site and decks: <https://r13v.github.io/ebb/>
 
-- A band above the prompt shows one card: `el corazón  [ Show ]  [ Skip ]`.
-- Show the answer, then grade the card: `el corazón — heart  [ Again 1m ]  [ Hard 6m ]  [ Good 10m ]  [ Easy 2d ]`. A hint of the note, if it has one, follows the answer. The next card comes at once.
+- A band above the prompt shows one card: `el corazón  │  r: Show  s: Skip`.
+- Show the answer, then grade the card: `el corazón — heart  │  f: Forgot 1m  g: Got it 10m`. A hint of the note, if it has one, follows the answer. The next card comes at once.
 - You can do it while Claude works, or ignore the band. The `🌊 ebb` button under the prompt hides the band and shows it again. ebb never interrupts you.
 
 The scheduler is FSRS-6, the algorithm that Anki uses.
@@ -81,7 +81,7 @@ In the band above the prompt:
 
 - Click a button, or press `ctrl+x tab` to move the keys to the band and then press its key.
 - Press `r` to show the answer, or `s` to skip the card. A skipped card comes back when no other card is left.
-- Press `1` (Again), `2` (Hard), `3` (Good) or `4` (Easy) to grade the card. Each button shows the next interval.
+- Press `f` (Forgot) or `g` (Got it) to grade the card. Each button shows its key and when the card comes back.
 - Press Escape to return to the prompt.
 - Click `🌊 ebb` under the prompt to hide or show the band. It stays as you left it in new sessions.
 

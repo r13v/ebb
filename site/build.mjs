@@ -118,7 +118,8 @@ button.copy.done { background: var(--ink); color: var(--bg); }
 .term .band { margin-top: 14px; color: var(--term-dim); }
 .term .band b { color: var(--term-ink); font-weight: 500; }
 .term .band .btn { color: var(--term-ink); margin-left: 10px; }
-.term .band .btn.primary { color: var(--accent); }
+.term .band .sep { margin-left: 10px; }
+.term .band .btn i { color: var(--accent); font-style: normal; }
 .term .grades { display: none; }
 .term .band.on .grades { display: block; }
 .term .band.on .ask { display: none; }
@@ -194,8 +195,8 @@ pre .k { color: var(--accent); }
       <div class="tool">⏺ <b>Bash</b> npm test -- login</div>
       <div class="reply"><span class="spin" id="spin">✻</span> <span class="word">Noodling</span><span class="meta">… (12s · ↓ 1.4k tokens)</span></div>
       <div class="band" id="band">
-        <div class="ask"><b id="front">el corazón</b><span class="btn primary">[ Show ]</span><span class="btn">[ Skip ]</span></div>
-        <div class="grades"><b id="pair">el corazón — heart</b><span class="hint" id="hint"></span><span class="btn">[ Again 1m ]</span><span class="btn">[ Hard 6m ]</span><span class="btn primary">[ Good 10m ]</span><span class="btn">[ Easy 2d ]</span></div>
+        <div class="ask"><b id="front">el corazón</b><span class="sep">│</span><span class="btn"><i>r</i>: Show</span><span class="btn"><i>s</i>: Skip</span></div>
+        <div class="grades"><b id="pair">el corazón — heart</b><span class="hint" id="hint"></span><span class="sep">│</span><span class="btn"><i>f</i>: Forgot 1m</span><span class="btn"><i>g</i>: Got it 10m</span></div>
       </div>
       <div class="prompt">❯<span class="foot">🌊 ebb</span></div>
     </div>
@@ -207,7 +208,7 @@ pre .k { color: var(--accent); }
     <div class="steps">
       <div class="step"><span class="n">1</span><h3>A card</h3><p>Above the prompt, ebb shows the next card: a due one first, then a new one. You keep typing as usual.</p></div>
       <div class="step"><span class="n">2</span><h3>Show</h3><p>Click Show, or press <code>ctrl+x tab</code> and <code>r</code>. Skip puts the card aside for now.</p></div>
-      <div class="step"><span class="n">3</span><h3>Grade</h3><p>The answer comes with the note's hint, such as the gender of a word. Again, Hard, Good or Easy, each with its next interval. Then the next card comes.</p></div>
+      <div class="step"><span class="n">3</span><h3>Grade</h3><p>The answer comes with the note's hint, such as the gender of a word. Forgot (<code>f</code>) or Got it (<code>g</code>), each with when the card comes back. Then the next card comes.</p></div>
     </div>
   </section>
 
