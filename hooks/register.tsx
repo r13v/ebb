@@ -201,20 +201,29 @@ const listDecks = async ($: $): Promise<string> => {
 // Cards skipped in this session; they come back when nothing else is left.
 const skipped = new Set<string>()
 
+// New and due cards take turns (`nextCard`). `chosenWith` is the turn of the card in the band,
+// `wasNew` whether that card was new: the next pick takes the other turn.
+let chosenWith = false
+let wasNew = false
+
 /**
  * Puts the next card in the band, with its answer hidden. `previous`, the card just graded or
- * skipped, never comes straight back while another card is left.
+ * skipped, never comes straight back while another card is left. `isRepick` chooses again for
+ * the same turn, so a card that came due can take the band's place without moving the turns.
  */
-const showNextCard = async ($: $, previous?: string) => {
+const showNextCard = async ($: $, previous?: string, isRepick = false) => {
   try {
     const data = await load($)
     const now = Date.now()
     const avoid = previous ? [previous] : []
-    let card = nextCard(data, now, new Set([...skipped, ...avoid]))
+    const isNewTurn = isRepick ? chosenWith : !wasNew
+    let card = nextCard(data, now, new Set([...skipped, ...avoid]), isNewTurn)
     if (!card) {
       skipped.clear()
-      card = nextCard(data, now, new Set(avoid)) ?? nextCard(data, now)
+      card = nextCard(data, now, new Set(avoid), isNewTurn) ?? nextCard(data, now)
     }
+    chosenWith = isNewTurn
+    wasNew = card?.state === 0
     await update($, band, (): Band => ({ cardId: card?.id ?? null, isRevealed: false, shownAt: now }))
   } catch (error) {
     await update($, band, (): Band => ({ cardId: null, isRevealed: false, shownAt: 0 }))
@@ -506,7 +515,7 @@ export const register: Register = on => {
 
   // A card may have come due while Claude worked; an open answer stays as it is.
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined && !(await read($, band)).isRevealed) await showNextCard($)
+    if (e.agentId === undefined && !(await read($, band)).isRevealed) await showNextCard($, undefined, true)
     return next(e)
   })
 

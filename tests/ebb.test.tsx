@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
+import { addNotes, emptyData, ensureDeck, grade } from '../hooks/model'
+
 const HOME = '/home/u'
 const DIR = `${HOME}/.claude/ebb`
 
@@ -239,6 +241,39 @@ test('a graded card never comes straight back, also in a deck of two', async ($,
     last = next
   }
   await ui.unmount()
+})
+
+test('the band alternates new cards with due ones', async ($, on) => {
+  engine(on)
+  const data = emptyData()
+  ensureDeck(data, { id: 'es', name: 'Spanish', learn: 'Spanish', native: 'English' })
+  const words = ['uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis']
+  addNotes(
+    data,
+    'es',
+    words.map(w => ({ front: w, back: w })),
+    'test',
+    0,
+  )
+  // The first three were reviewed before and are due now; the other three are new.
+  const now = Date.now()
+  for (const id of Object.keys(data.cards).slice(0, 3)) {
+    grade(data, id, 3, now - 10 * 86_400_000)
+    data.cards[id]!.due = now - 1000
+  }
+  const fs = disk(on, { [`${DIR}/data.json`]: JSON.stringify(data) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount(BAND)
+  const shownWords: string[] = []
+  for (let n = 0; n < 4; n++) {
+    shownWords.push((await front(ui))!)
+    await ui.press({ key: 'show' })
+    await ui.press({ key: 'g3' })
+  }
+  await ui.unmount()
+  const isNewWord = (w: string) => words.indexOf(w) >= 3
+  expect(shownWords.map(isNewWord)).toEqual([true, false, true, false])
+  expect(fs.files.has(`${DIR}/data.json`)).toBe(true)
 })
 
 test('skip shows another card and changes no schedule', async ($, on) => {

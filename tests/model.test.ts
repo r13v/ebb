@@ -188,3 +188,14 @@ test('a learning card waits for its step while other cards are left', async () =
   expect(nextCard(data, now + 60_000)!.id).not.toBe(first.id)
   expect(nextCard(data, now + 11 * 60_000)!.id).toBe(first.id)
 })
+
+test('new and due cards take turns while both are left', async () => {
+  const data = seeded()
+  const now = Date.UTC(2026, 10, 7, 10)
+  const [first, second] = Object.values(data.cards)
+  grade(data, first!.id, 3, now - DAY)
+  data.cards[first!.id]!.due = now
+  // The due card goes first on a due turn, a new card in deck order on a new turn.
+  expect(nextCard(data, now, new Set(), false)!.id).toBe(first!.id)
+  expect(nextCard(data, now, new Set(), true)!.id).toBe(second!.id)
+})

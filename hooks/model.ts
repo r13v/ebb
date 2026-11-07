@@ -202,16 +202,25 @@ const byOrder = (data: Data) => (a: Card, b: Card) =>
  * minutes) like any other: shown early, it would come straight back after its grade.
  * A production card is of a word the person knows already, so it takes none of the daily limit:
  * otherwise a mature deck would fill the limit with them and stop new words.
+ * With `isNewTurn`, a new card within the limit goes before the due ones: the band alternates
+ * them, as Anki mixes new cards with reviews, so a run of due cards never stops new words.
  */
-export const nextCard = (data: Data, now: number, skip: ReadonlySet<string> = new Set()): Card | undefined => {
+export const nextCard = (
+  data: Data,
+  now: number,
+  skip: ReadonlySet<string> = new Set(),
+  isNewTurn = false,
+): Card | undefined => {
   const cards = Object.values(data.cards).filter(c => !skip.has(c.id) && data.notes[c.note])
-  const due = cards.filter(c => !isNew(c) && c.due <= now).sort((a, b) => a.due - b.due)
-  if (due[0]) return due[0]
-
   const fresh = cards.filter(isNew).sort(byOrder(data))
   const freshToday = fresh.find(
     c => c.kind === 'recognition' && newLeftToday(data, data.decks[data.notes[c.note]!.deck]!, now) > 0,
   )
+  if (isNewTurn && freshToday) return freshToday
+
+  const due = cards.filter(c => !isNew(c) && c.due <= now).sort((a, b) => a.due - b.due)
+  if (due[0]) return due[0]
+
   if (freshToday) return freshToday
 
   const production = fresh.find(c => c.kind === 'production')
