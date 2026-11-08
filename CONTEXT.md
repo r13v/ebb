@@ -13,6 +13,9 @@ _Avoid_: Bundled deck, preset, package
 **Language deck**: A deck that teaches a language; it knows the language learned and the language of the answers, and makes both recognition and production cards.
 _Avoid_: Vocabulary deck
 
+**Active deck**: The one deck whose cards the band shows; the user switches it with `/ebb use`.
+_Avoid_: Current deck, focus, course
+
 **Note**: One thing to learn, such as a word with its translation, from which one or more cards are made.
 _Avoid_: Word, entry, item
 

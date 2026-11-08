@@ -21,6 +21,7 @@ pi install npm:pi-ebb
 
 - `/ebb install <file or URL>` adds a deck file, for example about 2000 words of Castilian Spanish with Russian translations: `/ebb install https://r13v.github.io/ebb/decks/es-ru.json`.
 - `/ebb add <topic>` writes up to 9 new notes with the model of the session. Press `1` to `9` to tick a note, `a` to add the ticked notes, `x` or Escape to cancel.
+- `/ebb use @<deck>` makes the deck active: the band shows only its cards.
 - `/ebb decks`, `/ebb stats`, `/ebb pause [1h|30m|2d|off]`.
 
 The card shows above the editor. The shortcuts never take a key the editor types:

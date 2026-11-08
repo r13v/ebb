@@ -92,6 +92,8 @@ ebb comes with no cards. Make a deck, or install one.
 
   Every deck in `decks/` of this repository is on the site, with a button that copies its install command. To share a deck, add its file to `decks/` in a pull request.
 
+The band shows the cards of one deck, the active deck. Until you choose one, the active deck is the deck you reviewed last, or your first deck. To study another deck, type `/ebb use @<deck>`. Another deck from `/ebb install` or `/ebb add @<deck>` does not become active. The due cards of the other decks wait; `/ebb decks` shows how many.
+
 ### Deck file
 
 A deck file is JSON:
@@ -120,11 +122,12 @@ A deck file is JSON:
 |---|---|
 | `/ebb` | Shows the counts and the commands. |
 | `/ebb install <file or URL>` | Adds a deck file, or the new notes of a deck file you installed before. |
-| `/ebb decks` | Lists your decks with their cards, due cards and new cards. |
-| `/ebb add <topic>` | Claude writes up to 9 new notes on the topic. In a language deck, a second model call translates each note back and flags the notes that do not match. You select the notes to add. |
-| `/ebb add @<deck> <topic>` | The same for a named deck. ebb creates the deck on first use. With more than one deck, the name is necessary. |
+| `/ebb decks` | Lists your decks with their cards, due cards and new cards. `▶` marks the active deck. |
+| `/ebb use @<deck>` | Makes the deck active: the band shows only its cards. |
+| `/ebb add <topic>` | Claude writes up to 9 new notes on the topic for the active deck. In a language deck, a second model call translates each note back and flags the notes that do not match. You select the notes to add. |
+| `/ebb add @<deck> <topic>` | The same for a named deck. ebb creates the deck on first use. |
 | `/ebb pause [1h\|30m\|2d\|off]` | Hides the band for that time. The default is 1 hour. |
-| `/ebb stats` | Shows the number of notes, due cards and new cards. |
+| `/ebb stats` | Shows the number of notes, due cards and new cards in the active deck. |
 
 In the band above the prompt:
 
@@ -145,6 +148,7 @@ In the pane of `/ebb add`:
 
 - A new note gets a recognition card (for example Spanish → Russian).
 - In a language deck, when the recognition card reaches a stability of 21 days, ebb adds a production card (Russian → Spanish). A deck of facts asks in one direction only.
+- The band takes cards of the active deck only.
 - The band takes due cards and new cards in turns, as Anki mixes new cards with reviews. New cards come in deck order, up to 20 each day for each deck. Then new production cards: they are words you know already, so they do not count toward the 20. To change the number, set `newPerDay` on the deck in `data.json`.
 - A card you just graded or skipped never comes straight back while another card is left. A learning card waits for its step.
 - Learning steps are 1 minute and 10 minutes. The relearning step is 10 minutes.

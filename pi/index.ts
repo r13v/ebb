@@ -275,7 +275,7 @@ export default async function ebb(pi: ExtensionAPI) {
   })
 
   pi.registerCommand('ebb', {
-    description: 'Spaced repetition above the editor: add, install, decks, pause, stats',
+    description: 'Spaced repetition above the editor: add, install, decks, use, pause, stats',
     handler: async (args, command) => {
       ctx = command
       const text = await session
