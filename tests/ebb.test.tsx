@@ -539,3 +539,71 @@ test('after /clear a band the person hid stays hidden', async ($, on) => {
   expect(await front(after)).toBeUndefined()
   await after.unmount()
 })
+
+test('/ebb use switches the deck in the band; install and add of another deck never do', async ($, on) => {
+  engine(on)
+  replies(
+    on,
+    '{"notes":[{"front":"What schedules a pod?","back":"the scheduler"}]}',
+    '{"notes":[{"front":"la caña","back":"small beer"}]}',
+    '{"fronts":["la caña"]}',
+  )
+  const fs = disk(on)
+  await withDeck($, fs)
+  const k8s = {
+    id: 'k8s',
+    name: 'Kubernetes',
+    notes: [{ front: 'What restarts a crashed pod?', back: 'its controller' }],
+  }
+  fs.files.set(`${HOME}/decks/k8s.json`, { text: JSON.stringify(k8s), mtimeMs: 0 })
+  expect((await $.command.run(ebb('install ~/decks/k8s.json'))).text).toMatch(/Switch to it: \/ebb use @k8s/)
+  const ui = await $.ui.mount(BAND)
+  expect(await front(ui)).not.toMatch(/pod/)
+  expect((await $.command.run(ebb('decks'))).text).toMatch(/▶ es — Spanish/)
+  expect((await $.command.run(ebb('use @nope'))).text).toMatch(/No deck nope/)
+  expect((await $.command.run(ebb('use constructor'))).text).toMatch(/No deck constructor/)
+  expect((await $.command.run(ebb('use'))).text).toMatch(/▶ es — Spanish/)
+
+  expect((await $.command.run(ebb('use k8s'))).text).toMatch(/Kubernetes shows above the prompt/)
+  expect(await front(ui)).toBe('What restarts a crashed pod?')
+  expect((await $.command.run(ebb('stats'))).text).toMatch(/^Kubernetes · notes: 1 · due: 0 · new: 1$/)
+  await ui.unmount()
+
+  // With two decks, a plain /ebb add writes into the active one.
+  await $.command.run(ebb('add pods'))
+  const pane = await $.ui.mount(PANE)
+  await waitForList(pane)
+  await pane.press({ key: 'add' })
+  await pane.unmount()
+  const note = (Object.values(fs.data().notes) as { deck: string; front: string }[]).find(
+    n => n.front === 'What schedules a pod?',
+  )
+  expect(note?.deck).toBe('k8s')
+
+  // /ebb add into another deck leaves the active deck as it is.
+  await $.command.run(ebb('add @es bar'))
+  const other = await $.ui.mount(PANE)
+  await waitForList(other)
+  await other.press({ key: 'add' })
+  await other.unmount()
+  expect((await $.command.run(ebb('decks'))).text).toMatch(/▶ k8s — Kubernetes/)
+})
+
+test('a deck named like a property of every object is a new deck', async ($, on) => {
+  engine(on)
+  replies(
+    on,
+    '{"id":"constructor","name":"Constructors","learn":null,"native":null}',
+    '{"notes":[{"front":"What runs on new?","back":"the constructor"}]}',
+  )
+  const fs = disk(on)
+  await withDeck($, fs)
+  await $.command.run(ebb('add @constructor basics'))
+  const ui = await $.ui.mount(PANE)
+  await waitForList(ui)
+  await ui.press({ key: 'add' })
+  await ui.unmount()
+  const data = fs.data()
+  expect(Object.hasOwn(data.decks, 'constructor')).toBe(true)
+  expect((Object.values(data.notes) as { deck: string }[]).filter(n => n.deck === 'constructor')).toHaveLength(1)
+})

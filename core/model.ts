@@ -41,8 +41,11 @@ export type Data = {
   decks: Record<string, Deck>
   notes: Record<string, Note>
   cards: Record<string, Card>
-  /** newByDeck: how many new recognition cards each deck introduced on `day` (a local date). */
-  meta: { pausedUntil?: number; newByDeck?: Record<string, { day: string; count: number }> }
+  /**
+   * newByDeck: how many new recognition cards each deck introduced on `day` (a local date).
+   * activeDeck: the deck `/ebb use` chose; `activeDeck()` reads it.
+   */
+  meta: { pausedUntil?: number; activeDeck?: string; newByDeck?: Record<string, { day: string; count: number }> }
 }
 
 type ReviewLog = {
@@ -100,12 +103,13 @@ export const face = (data: Data, card: Card): Face | undefined => {
 }
 
 export const ensureDeck = (data: Data, deck: Partial<Deck> & { id: string; name: string }) => {
-  data.decks[deck.id] ??= {
-    newPerDay: NEW_PER_DAY,
-    kinds: ['recognition', 'production'],
-    productionUnlockDays: 21,
-    ...deck,
-  }
+  if (!Object.hasOwn(data.decks, deck.id))
+    data.decks[deck.id] = {
+      newPerDay: NEW_PER_DAY,
+      kinds: ['recognition', 'production'],
+      productionUnlockDays: 21,
+      ...deck,
+    }
   return data.decks[deck.id]!
 }
 
@@ -181,10 +185,25 @@ export const newLeftToday = (data: Data, deck: Deck, now: number) => {
   return today?.day === localDay(now) ? Math.max(0, deck.newPerDay - today.count) : deck.newPerDay
 }
 
-export const counts = (data: Data, now: number) => {
+/**
+ * The deck the band shows: the one `/ebb use` chose, else the deck of the card reviewed last,
+ * else the first deck. Undefined only without a deck.
+ */
+export const activeDeck = (data: Data): Deck | undefined => {
+  const chosen = data.meta.activeDeck
+  if (chosen && Object.hasOwn(data.decks, chosen)) return data.decks[chosen]
+  let last: Card | undefined
+  for (const c of Object.values(data.cards))
+    if (c.lastReview !== null && data.notes[c.note] && c.lastReview > (last?.lastReview ?? -1)) last = c
+  return (last && data.decks[data.notes[last.note]!.deck]) || Object.values(data.decks)[0]
+}
+
+/** Due and new cards of one deck. */
+export const counts = (data: Data, deckId: string, now: number) => {
   let due = 0
   let fresh = 0
   for (const c of Object.values(data.cards)) {
+    if (data.notes[c.note]?.deck !== deckId) continue
     if (isNew(c)) fresh++
     else if (c.due <= now) due++
   }
@@ -195,7 +214,7 @@ const byOrder = (data: Data) => (a: Card, b: Card) =>
   (data.notes[a.note]?.order ?? 0) - (data.notes[b.note]?.order ?? 0)
 
 /**
- * The next card for the band, or none only when every card is skipped.
+ * The next card of the active deck for the band, or none only when every card is skipped.
  * By schedule first: due cards, new recognition cards within the daily limit, new production
  * cards. Then ahead of schedule, so the band never runs dry: new cards past the limit, in deck
  * order, then the card that comes due soonest. A learning card waits for its step (1 or 10
@@ -211,7 +230,8 @@ export const nextCard = (
   skip: ReadonlySet<string> = new Set(),
   isNewTurn = false,
 ): Card | undefined => {
-  const cards = Object.values(data.cards).filter(c => !skip.has(c.id) && data.notes[c.note])
+  const deck = activeDeck(data)?.id
+  const cards = Object.values(data.cards).filter(c => !skip.has(c.id) && data.notes[c.note]?.deck === deck)
   const fresh = cards.filter(isNew).sort(byOrder(data))
   const freshToday = fresh.find(
     c => c.kind === 'recognition' && newLeftToday(data, data.decks[data.notes[c.note]!.deck]!, now) > 0,

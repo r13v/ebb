@@ -13,6 +13,7 @@ import {
   parseNotes,
 } from './generate'
 import {
+  activeDeck,
   addNotes,
   counts,
   type Data,
@@ -95,10 +96,11 @@ export type Host = {
 export const dataDir = (home: string, xdgDataHome?: string) => `${xdgDataHome || `${home}/.local/share`}/ebb`
 
 const HELP = `/ebb decks — your decks
+/ebb use @deck — the deck whose cards show above the prompt
 /ebb install <file or URL> — add a deck file
-/ebb add [@deck] <topic or word list> — write new notes with the model; a new @deck is made on first use
+/ebb add [@deck] <topic or word list> — write new notes with the model, in the active deck or in @deck; a new @deck is made on first use
 /ebb pause [1h|30m|2d|off] — no card above the prompt for a while
-/ebb stats — notes, due cards and new cards`
+/ebb stats — notes, due cards and new cards of the active deck`
 
 const LOCK_STALE_MS = 10_000
 const RECENT_PROMPTS = 3
@@ -310,36 +312,57 @@ export const createSession = () => {
     }
     const file = parseDeckFile(source)
     if ('error' in file) return `Not a deck: ${file.error}`
-    const added = await mutate(host, d => {
+    const { added, isActive } = await mutate(host, d => {
       ensureDeck(d, file.deck)
-      return addNotes(d, file.deck.id, file.notes, `install: ${where}`, Date.now(), true)
+      const added = addNotes(d, file.deck.id, file.notes, `install: ${where}`, Date.now(), true)
+      return { added, isActive: activeDeck(d)?.id === file.deck.id }
     })
     await showNextCard(host)
-    return `Installed ${file.deck.name}: ${added} new notes. Its cards show above the prompt.`
+    return isActive
+      ? `Installed ${file.deck.name}: ${added} new notes. Its cards show above the prompt.`
+      : `Installed ${file.deck.name}: ${added} new notes. Switch to it: /ebb use @${file.deck.id}`
   }
 
   const listDecks = async (host: Host): Promise<string> => {
     const data = await load(host)
     const now = Date.now()
+    const active = activeDeck(data)?.id
     const rows = Object.values(data.decks).map(d => {
       const cards = Object.values(data.cards).filter(c => data.notes[c.note]?.deck === d.id)
       const due = cards.filter(c => c.state !== 0 && c.due <= now).length
       const fresh = cards.filter(c => c.state === 0).length
-      return `${d.id} — ${d.name}: ${cards.length} cards, ${due} due, ${fresh} new`
+      return `${d.id === active ? '▶' : ' '} ${d.id} — ${d.name}: ${cards.length} cards, ${due} due, ${fresh} new`
     })
     return [
       ...(rows.length ? rows : ['No deck yet.']),
       '',
+      ...(rows.length > 1 ? ['▶ shows above the prompt. Switch: /ebb use @<deck>.'] : []),
       'Make one: /ebb add <topic>. Install one: /ebb install <file or URL>.',
     ].join('\n')
   }
 
+  /** `/ebb use @deck`: makes the deck active and shows its card; without a known deck, the list. */
+  const useDeck = async (host: Host, tail: string): Promise<string> => {
+    const id = tail.replace(/^@/, '')
+    if (!id || !Object.hasOwn((await load(host)).decks, id))
+      return `${id ? `No deck ${id}.\n\n` : ''}${await listDecks(host)}`
+    const deck = await mutate(host, data => {
+      data.meta.activeDeck = id
+      return data.decks[id]!
+    })
+    await showNextCard(host)
+    return `${deck.name} shows above the prompt.`
+  }
+
   const stats = async (host: Host) => {
     const data = await load(host)
-    const c = counts(data, Date.now())
+    const deck = activeDeck(data)
+    if (!deck) return 'No deck yet.'
+    const c = counts(data, deck.id, Date.now())
+    const notes = Object.values(data.notes).filter(n => n.deck === deck.id).length
     const paused = (data.meta.pausedUntil ?? 0) > Date.now() ? ' · paused' : ''
 
-    return `Notes: ${Object.keys(data.notes).length} · due: ${c.due} · new: ${c.new}${paused}`
+    return `${deck.name} · notes: ${notes} · due: ${c.due} · new: ${c.new}${paused}`
   }
 
   const pause = async (host: Host, tail: string) => {
@@ -369,6 +392,8 @@ export const createSession = () => {
         return listDecks(host)
       case 'install':
         return installDeck(host, tail)
+      case 'use':
+        return useDeck(host, tail)
       case 'add':
         return tail ? add(tail) : 'Name a topic: /ebb add ordering at a bar'
       case 'pause':
@@ -403,12 +428,8 @@ export const createSession = () => {
     const named = match?.[1]
     const topic = match ? match[2]! : args
     const data = await load(host)
-    const decks = Object.values(data.decks)
-    if (!named && decks.length > 1)
-      return { text: `Name the deck: /ebb add @<deck> ${topic}. Decks: ${decks.map(d => d.id).join(', ')}.` }
-
-    const onlyDeck = decks.length === 1 ? decks[0] : undefined
-    const deck = named ? data.decks[named] : onlyDeck
+    let deck = activeDeck(data)
+    if (named) deck = Object.hasOwn(data.decks, named) ? data.decks[named] : undefined
     const view: View = { deck: deck?.id ?? named ?? '', topic, candidates: [], status: 'Reading the request…' }
 
     return { view, deck, named }

@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import { parseDeckFile } from '../core/decks'
 import { flagMismatches, parseNotes } from '../core/generate'
 import {
+  activeDeck,
   addNotes,
   DAY,
   type Data,
@@ -188,4 +189,41 @@ test('a learning card waits for its step while other cards are left', async () =
   grade(data, first.id, 3, now)
   expect(nextCard(data, now + 60_000)!.id).not.toBe(first.id)
   expect(nextCard(data, now + 11 * 60_000)!.id).toBe(first.id)
+})
+
+/** The seeded Spanish deck and a deck of facts with one card that is long overdue. */
+const twoDecks = () => {
+  const data = seeded()
+  ensureDeck(data, { id: 'k8s', name: 'Kubernetes', kinds: ['recognition'] })
+  addNotes(data, 'k8s', [{ front: 'What restarts a crashed pod?', back: 'its controller' }], 'test', 0)
+  const k8s = Object.values(data.cards).find(c => data.notes[c.note]!.deck === 'k8s')!
+  grade(data, k8s.id, 3, 0)
+  return { data, k8s }
+}
+
+test('the band shows only the active deck, also when it runs ahead or every card is skipped', async () => {
+  const { data, k8s } = twoDecks()
+  data.meta.activeDeck = 'es'
+  const later = 365 * DAY
+  const es = new Set(Object.keys(data.cards).filter(id => id !== k8s.id))
+  for (let skip = new Set<string>(); skip.size < es.size; ) {
+    const card = nextCard(data, later, skip)!
+    expect(es.has(card.id)).toBe(true)
+    skip.add(card.id)
+  }
+  expect(nextCard(data, later, es)).toBeUndefined()
+
+  data.meta.activeDeck = 'k8s'
+  expect(nextCard(data, later)!.id).toBe(k8s.id)
+})
+
+test('without a chosen deck, the active deck is the one reviewed last, else the first', async () => {
+  const { data } = twoDecks()
+  expect(activeDeck(data)!.id).toBe('k8s')
+  data.meta.activeDeck = 'gone'
+  expect(activeDeck(data)!.id).toBe('k8s')
+  const unreviewed = seeded()
+  ensureDeck(unreviewed, { id: 'k8s', name: 'Kubernetes' })
+  expect(activeDeck(unreviewed)!.id).toBe('es')
+  expect(activeDeck(emptyData())).toBeUndefined()
 })

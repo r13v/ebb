@@ -196,8 +196,8 @@ export const register: Register = on => {
     await showNextCard($)
     await $.command.register({
       name: 'ebb',
-      description: 'Spaced repetition above the prompt: add, install, decks, pause, stats',
-      argumentHint: '[add <topic> | install <file or URL> | decks | pause 1h | stats]',
+      description: 'Spaced repetition above the prompt: add, install, decks, use, pause, stats',
+      argumentHint: '[add <topic> | install <file or URL> | decks | use @deck | pause 1h | stats]',
     })
     return started
   })
